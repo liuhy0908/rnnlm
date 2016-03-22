@@ -7,7 +7,7 @@ def get_config_penn():
     config['vocabsize'] = 10001
 
     #####################
-    datadir = './data/'
+    datadir = '../data/'
     config['train_file'] = datadir + 'train'
     config['valid_file'] = datadir + 'valid'
     config['test_file'] = datadir + 'test'
