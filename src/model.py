@@ -403,7 +403,7 @@ class SLSTM(object):
                                      self.W_cs,  self.W_css,  \
                                      self.W_s_h, self.W_h_h,  \
                                      self.b_s_h]
-        #self.params = self.params + [self.W_xs,  self.W_xss, 
+        #self.params = self.params + [self.W_xs,  self.W_xss,
         if self.with_contex:
             size_ch = (self.c_hids, self.n_hids)
             self.W_cz = param_init().uniform(size_ch)
@@ -790,13 +790,13 @@ class rnn_pyramid_layer(object):
             self.b_grup_xx = param_init().constant((n_hids,))
             self.params = self.params \
                         + [self.W_grup_ru, self.W_grup_hh,
-                           self.W_grup_x, self.W_grup_xx, 
+                           self.W_grup_x, self.W_grup_xx,
                            self.b_grup_x, self.b_grup_xx]
         else:
             self.gru_pyramid = GRU_Z(n_in_emb, n_hids)
             self.params.extend(self.gru_pyramid.params)
 
-        if True: # 
+        if True: #
             self.W_sz = param_init().normal(size_hh)
             self.W_sr = param_init().normal(size_hh)
             self.W_sh = param_init().normal(size_hh)
@@ -809,11 +809,11 @@ class rnn_pyramid_layer(object):
             self.b_r = param_init().constant((n_hids,))
             self.b_h = param_init().constant((n_hids,))
 
-            if True: 
+            if True:
                 self.struct_begin = None
-                #self.struct_begin = param_init().constant((n_hids,), scale=0.) # for struct begin tag <struct> 
+                #self.struct_begin = param_init().constant((n_hids,), scale=0.) # for struct begin tag <struct>
                 #self.params = self.params + [self.struct_begin]
-            if False: 
+            if False:
                 self.struct_end = param_init().constant((n_hids,), scale=0.) # for struct end tag <struct> after W_ep
                 self.params = self.params + [self.struct_end]
 
@@ -899,7 +899,7 @@ class rnn_pyramid_layer(object):
             preact = T.inc_subtensor(preact[:t+1], pre_x[None, :])
             m_t = m[:, None]
         elif preact.ndim == 3:
-            assert preactx.ndim == 3 
+            assert preactx.ndim == 3
             assert pre_x.ndim == 2
             assert pre_xx.ndim == 2
             if T.lt(t+1, n):
@@ -956,7 +956,7 @@ class rnn_pyramid_layer(object):
             preact = T.inc_subtensor(preact[:t+1], pre_x[None, :])
             m_t = m[:, None]
         elif preact.ndim == 3:
-            assert preactx.ndim == 3 
+            assert preactx.ndim == 3
             assert pre_x.ndim == 2
             assert pre_xx.ndim == 2
             if T.lt(t+1, n):
@@ -1164,7 +1164,7 @@ class rnn_pyramid_layer(object):
         #chunks_t = self._rnn_step(self.struct_end_x, x_m, p_t, self.W_hp, t, self.n_steps)
 
         if self.gru_z :
-            p_t = self.gru_pyramid._pyramid_step_lazy(e_t, x_m, t, p_tm1, self.n_steps)
+            p_t = self.gru_pyramid._pyramid_step_lazy(e_t, x_m, t, p_tm1)
             #p_t = self.gru_pyramid._gru_pyramid_step_lazy(e_t, x_m, t, p_tm1, self.n_steps)
         elif False:
             p_t = self._gru_pyramid_step(self.n_hids, e_t, e_t, x_m, p_tm1, \
@@ -1174,10 +1174,10 @@ class rnn_pyramid_layer(object):
                                          self.gru_pyramid.b_zr, self.gru_pyramid.b_h, \
                                          shifted_begin_tag=None)
         elif True:
-            p_t = self._gru_pyramid_step_member(n_hid=self.n_hids, 
-                                                x=e_t, 
-                                                xx=e_t, 
-                                                m=x_m, 
+            p_t = self._gru_pyramid_step_member(n_hid=self.n_hids,
+                                                x=e_t,
+                                                xx=e_t,
+                                                m=x_m,
                                                 t=t,
                                                 h_tm1=p_tm1,
                                                 n=self.n_steps,
@@ -1218,7 +1218,7 @@ class rnn_pyramid_layer(object):
         state_below_x = T.dot(state_below, W_x) + b_x
         emb_below_x = emb_below #T.dot(emb_below, self.W_ep) + self.b_p
         if False:
-            self.struct_end_x = self.struct_end[None,:] * T.ones_like(emb_below_x[0]) 
+            self.struct_end_x = self.struct_end[None,:] * T.ones_like(emb_below_x[0])
 
         if self.with_contex:
             if init_state is None:

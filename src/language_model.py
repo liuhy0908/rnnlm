@@ -1,6 +1,6 @@
 import theano
 import theano.tensor as T
-from theano.compile.nanguardmode import NanGuardMode
+#from theano.compile.nanguardmode import NanGuardMode
 from model import GRU, LSTM, SLSTM, lookup_table, chunk_layer, dropout_layer, maxout_layer, rnn_pyramid_layer, LogisticRegression
 from utils import adadelta, step_clipping
 from stream import DStream
@@ -220,6 +220,7 @@ def test(test_fn , tst_stream):
     for sentence, sentence_mask in tst_stream.get_epoch_iterator():
         cost = test_fn(sentence.T, sentence_mask.T, 0)
         sums += cost[0]
+        #case += sentence_mask[1:].sum()
         case += sentence_mask[:,1:].sum()
         case_wrong += sentence_mask[1:].sum()
     ppl = numpy.exp(sums/case)
@@ -258,30 +259,47 @@ if __name__=='__main__':
     import configurations
     cfig = getattr(configurations, 'get_config_penn')()
     if True:
-        logger.info("\nModel options:\n{}".format(pprint.pformat(cfig)))
-        sentence = T.lmatrix()
-        sentence_mask = T.matrix()
-        use_noise = T.iscalar()
-        lm = rnnlm(**cfig)
-        lm.apply(sentence, sentence_mask, use_noise)
+    #for batch_size in [100]:
+    #for nhids in [64 * i for i in [1,2,4,8]]:
+        #for nemb in [64 * i for i in [1,2,4,8]]:
+            logger.info("\nModel options:\n{}".format(pprint.pformat(cfig)))
 
-        struct_num = lm.sent_len
-        cost_sum = lm.cost
-        cost_mean = lm.cost/sentence.shape[1]
+            sentence = T.lmatrix()
+            sentence_mask = T.matrix()
+            use_noise = T.iscalar()
+            lm = rnnlm(**cfig)
+            lm.apply(sentence, sentence_mask, use_noise)
 
-        params = lm.params
-        regular = lm.L1 * 1e-5 + lm.L2 * 1e-5
-        grads = T.grad(cost_mean, params)
+            #struct_num = lm.structs.shape[0]
+            #struct_num = lm.rnn_len
+            struct_num = lm.sent_len
 
-        hard_clipping = cfig['hard_clipping']
-        soft_clipping = T.fscalar()
-	    if cfig['soft_clipping_begin'] > 0.:
+            cost_sum = lm.cost
+            cost_mean = lm.cost/sentence.shape[1]
+
+            params = lm.params
+            regular = lm.L1 * 1e-5 + lm.L2 * 1e-5
+
+            grads = T.grad(cost_mean, params)
+
+            hard_clipping = cfig['hard_clipping']
+            soft_clipping = T.fscalar()
+	    #if cfig['soft_clipping_begin'] > 0.:
             skip_nan_batch = 0
             grads, nan_num, inf_num = step_clipping(params, grads, soft_clipping, cfig['shrink_scale_after_skip_nan_grad'], cfig['skip_nan_grad'])
 
             updates = adadelta(params, grads, hard_clipping)
             vs = DStream(datatype='valid', config=cfig)
             ts = DStream(datatype='test', config=cfig)
+
+	    #mode = theano.compile.MonitorMode(post_func=detect_nan).excluding('local_elemwise_fusion', 'inplace')
+	    #mode_test = theano.compile.MonitorMode(post_func=detect_nan_test).excluding('local_elemwise_fusion', 'inplace')
+            #fn = theano.function([sentence, sentence_mask, use_noise], [cost_mean, struct_num], updates=updates, mode=mode)
+            #test_fn = theano.function([sentence, sentence_mask, use_noise], [cost_sum], mode=mode_test)
+
+	    #mode=NanGuardMode(nan_is_error=True, inf_is_error=True, big_is_error=True)
+            #fn = theano.function([sentence, sentence_mask, use_noise], [cost_mean, struct_num], updates=updates, mode=mode)
+            #test_fn = theano.function([sentence, sentence_mask, use_noise], [cost_sum], mode=mode)
 
             fn = theano.function([sentence, sentence_mask, use_noise, soft_clipping], [cost_mean, struct_num, nan_num, inf_num], updates=updates)
             test_fn = theano.function([sentence, sentence_mask, use_noise], [cost_sum])
