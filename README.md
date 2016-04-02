@@ -3,5 +3,5 @@
 =======================
 * based on theano
 * recurrent neuron network language model
-* gmj 3.13
+* gmj 2016.3.13
 
