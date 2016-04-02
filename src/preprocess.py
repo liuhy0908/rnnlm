@@ -10,12 +10,12 @@ logger = logging.getLogger("preprocess")
 class PrepareData:
     def __init__(self, train_file, train_dic,
                  bos_token, eos_token,
-                 vocabsize=1000, unk_id=0,
+                 vocab_size=1000, unk_id=0,
                  unk_token='<unk>', seq_len=50, **kwargs):
         self.bos_token = bos_token
         self.eos_token = eos_token
         self.filename = train_file
-        self.vocabsize = vocabsize
+        self.vocabsize = vocab_size
         self.unk_id = unk_id
         self.unk_token = unk_token
         self.seq_len = seq_len
@@ -45,7 +45,7 @@ class PrepareData:
         index = self.unk_id + 1
         if self.unk_token in counter:
             del counter[self.unk_token]
-        for word, c in counter.most_common(self.vocabsize-3):
+        for word, c in counter.most_common(self.vocabsize-3): #FIXME 2 or 3
             worddict[word] = index
             index += 1
 

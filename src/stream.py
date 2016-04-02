@@ -8,6 +8,8 @@ from fuel.transformers import Batch, Padding, SortMapping, Unpack, Mapping
 
 import cPickle as pickle
 
+import random
+
 logger = logging.getLogger(__name__)
 
 
@@ -39,8 +41,16 @@ def DStream(datatype, config):
 
     # organize data in batches and pad shorter sequences with zeros
     batch_size = config['batch_size']
+    if datatype == 'train' and config['is_shuffle']: # FIXME: memory/IO issue, find better way to shuffle text file
+        num_lines = sum(1 for line in open(filename)) 
+        data_stream = Batch(data_stream, iteration_scheme=ConstantScheme(num_lines))
+        data_stream = Mapping(data_stream, SortMapping(lambda x: random.random()))
+        data_stream = Unpack(data_stream)
     data_stream = Batch(data_stream, iteration_scheme=ConstantScheme(batch_size*16))
-    data_stream = Mapping(data_stream, SortMapping(_length))
+    if datatype == 'train' and config['drop_last_batch_if_small']: # FIXME: why learn short sentence first?
+        data_stream = Mapping(data_stream, SortMapping(lambda x: - _length(x)))
+    else:
+        data_stream = Mapping(data_stream, SortMapping(_length))
     data_stream = Unpack(data_stream)
     data_stream = Batch(data_stream, iteration_scheme=ConstantScheme(batch_size))
     data_stream = Padding(data_stream)
