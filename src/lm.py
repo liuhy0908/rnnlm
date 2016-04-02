@@ -13,129 +13,7 @@ import pprint
 
 logger = logging.getLogger(__name__)
 
-class language_model(object):
-
-    def __init__(self, vocab_size, n_emb_lstm, n_emb_struct, n_emb_share, n_hids, n_shids, n_structs, dropout, **kwargs):
-        self.n_hids = n_hids
-        self.n_shids = n_shids # kwargs.pop('n_shids', n_hids)
-        self.n_structs = n_structs
-        self.n_emb_lstm = n_emb_lstm
-        self.n_emb_struct = n_emb_struct
-        self.n_emb_share = n_emb_share #kwargs.pop('n_emb_share', min(n_emb_lstm, n_emb_struct)/2)
-        self.vocab_size = vocab_size
-        self.dropout = dropout
-
-        self.params = []
-        self.layers = []
-
-    def apply(self, sentence, sentence_mask, use_noise=1):
-        n_emb_lstm = self.n_emb_lstm
-        n_emb_struct = self.n_emb_struct
-        n_emb_share = self.n_emb_share
-
-        src = sentence[:-1]
-        src_mask = sentence_mask[:-1]
-        tgt = sentence[1:]
-        tgt_mask = sentence_mask[1:]
-
-        if False: #(share only part of embedding)
-            n_emb_all = n_emb_lstm + n_emb_struct - n_emb_share
-            emb_all_range = T.arange(n_emb_all)
-            emb_lstm_range = T.arange(n_emb_lstm)
-            emb_struct_range = T.arange(n_emb_lstm - n_emb_share, n_emb_all)
-
-            table = lookup_table(n_emb_all, self.vocab_size, name='Wemb')
-            state_below = table.apply(src, emb_all_range)
-            state_below_lstm = table.apply(src, emb_lstm_range)
-            state_below_struct = table.apply(src, emb_struct_range)
-            self.layers.append(table)
-
-            rnn = SLSTM(n_emb_lstm, n_emb_struct, n_emb_share, self.n_hids, self.n_shids, self.n_structs)
-            #rnn = LSTM(self.n_in, self.n_hids)
-            hiddens = rnn.merge_out(state_below, state_below_lstm, state_below_struct, src_mask)
-            self.layers.append(rnn)
-
-        elif True: # use rnn_pyramid
-            emb_lstm_range = T.arange(n_emb_lstm)
-            table = lookup_table(n_emb_lstm, self.vocab_size, name='Wemb')
-            state_below = table.apply(src, emb_lstm_range)
-            self.layers.append(table)
-
-            if self.dropout < 1.0:
-                state_below = dropout_layer(state_below, use_noise, self.dropout)
-
-            rnn = rnn_pyramid_layer(n_emb_lstm, self.n_hids)
-            hiddens, cells, structs = rnn.apply(state_below, src_mask)
-            self.layers.append(rnn)
-            self.structs = structs
-
-        else: # share all embedding
-            emb_lstm_range = T.arange(n_emb_lstm)
-            table = lookup_table(n_emb_lstm, self.vocab_size, name='Wemb')
-            state_below = table.apply(src, emb_lstm_range)
-            self.layers.append(table)
-
-            if self.dropout < 1.0:
-                state_below = dropout_layer(state_below, use_noise, self.dropout)
-
-            rnn = LSTM(n_emb_lstm, self.n_hids)
-            hiddens, cells = rnn.apply(state_below, src_mask)
-            #hiddens = rnn.merge_out(state_below, src_mask)
-            self.layers.append(rnn)
-
-            if self.dropout < 1.0:
-                hiddens = dropout_layer(hiddens, use_noise, self.dropout)
-
-            rnn1 = LSTM(self.n_hids, self.n_hids)
-            hiddens, cells = rnn1.apply(hiddens, src_mask)
-            #hiddens = rnn.merge_out(state_below, src_mask)
-            self.layers.append(rnn1)
-
-            maxout = maxout_layer()
-            states = T.concatenate([state_below, hiddens], axis=2)
-            hiddens = maxout.apply(states, n_emb_lstm + self.n_hids, self.n_hids, src_mask)
-            self.layers.append(maxout)
-
-            #rnng = LSTM(n_emb_lstm, self.n_hids)
-            #hiddens, cells = rnn.apply(state_below, src_mask)
-            #hiddensg = rnng.merge_out(state_below, src_mask)
-            #self.layers.append(rnng)
-
-            if self.dropout < 1.0:
-                hiddens = dropout_layer(hiddens, use_noise, self.dropout)
-
-            #chunk = chunk_layer(n_lstm_in + n_lstm_out, n_lstm_out, n_chunk_out, 6)
-            n_emb_hid = n_emb_lstm + self.n_hids
-            emb_hid = T.concatenate([state_below, hiddens], axis=2)
-            #chunk = chunk_layer(self.n_hids, self.n_hids, self.n_hids, self.n_structs)
-            #hiddens = chunk.merge_out(hiddens, hiddens, src_mask, merge_how="for_struct",\
-            #        state_below_other=state_below, n_other=n_emb_lstm)
-            chunk = chunk_layer(n_emb_hid, self.n_hids, self.n_hids, self.n_structs)
-            hiddens = chunk.merge_out(emb_hid, hiddens, src_mask, merge_how="for_struct",\
-                    state_below_other=None, n_other=0)
-            #chunk = chunk_layer(self.n_hids, self.n_hids, self.n_hids, self.n_structs)
-            #hiddens = chunk.merge_out(hiddens, hiddensg, src_mask, merge_how="both",\
-            #        state_below_other=state_below, n_other=n_emb_lstm)
-            self.layers.append(chunk)
-
-        # apply dropout
-        if self.dropout < 1.0:
-            # dropout is applied to the output of maxout in ghog
-            hiddens = dropout_layer(hiddens, use_noise, self.dropout)
-
-        logistic_layer = LogisticRegression(hiddens, self.n_hids, self.vocab_size)
-        self.layers.append(logistic_layer)
-
-        self.cost = logistic_layer.cost(tgt, tgt_mask)
-
-        for layer in self.layers:
-            self.params.extend(layer.params)
-
-        self.L2 = sum(T.sum(item ** 2) for item in self.params)
-        self.L1 = sum(T.sum(abs(item)) for item in self.params)
-
 class rnnlm(object):
-
     def __init__(self, vocab_size, n_emb_lstm, n_emb_struct, n_emb_share, n_hids, n_shids, n_structs, dropout, **kwargs):
         self.n_hids = n_hids
         self.n_shids = n_shids # kwargs.pop('n_shids', n_hids)
@@ -181,7 +59,7 @@ class rnnlm(object):
             #hiddens = rnn.merge_out(state_below, src_mask)
             self.layers.append(rnn1)
 
-        if True:
+        if False:
             if self.dropout < 1.0:
                 hiddens = dropout_layer(hiddens, use_noise, self.dropout)
 

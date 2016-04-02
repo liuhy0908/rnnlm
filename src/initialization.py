@@ -9,9 +9,12 @@ logger = logging.getLogger(__name__)
 rng = numpy.random.RandomState(1234)
 
 
-def constant_weight(shape, value=0., name=None):
+def constant_weight(shape, value=0., name=None, share=True):
     param = numpy.ones(shape, dtype=theano.config.floatX) * value
-    return theano.shared(value=param, borrow=True, name=name)
+    if share:
+        return theano.shared(value=param, borrow=True, name=name)
+    else:
+        return param
 
 
 # uniform initialization for weights
@@ -23,6 +26,33 @@ def uniform_weight(rng, shape, name=None):
 
     return theano.shared(value=param, borrow=True, name=name)
 
+
+def _qr(dim, **kwargs):
+    scale = kwargs.pop('scale', 1.)
+    rng = kwargs.pop('rng', numpy.random.RandomState(1234))
+    if dim < 0:
+        raise ValueError
+    M = rng.randn(dim,dim).astype(theano.config.floatX)
+    Q, R = numpy.linalg.qr(M)
+    Q = Q * numpy.sign(numpy.diag(R))
+    param = Q*scale
+    return param
+
+def multi_orth(size, name="multi_orth", **kwargs):
+    scale = kwargs.pop('scale', 1.)
+    rng = kwargs.pop('rng', numpy.random.RandomState(1234))
+    if numpy.mod(size[0],size[1]) or numpy.mod(size[1],size[0]):
+        n_max = max(size[0], size[1])
+        n_min = min(size[0], size[1])
+        l_axis=0
+        if size[0] < size[1]:
+            l_axis=1
+        param = numpy.concatenate([_qr(dim=n_min, scale=scale, rng=rng) for i in range(n_max/n_min)], axis=l_axis)
+    else:
+        raise ValueError
+    if True: #self.shared:
+        param = theano.shared(value=param, name=name, borrow=True)
+        return param
 
 # orthogonal initialization for weights
 def ortho_weight(rng, shape, scale=1., name=None):
