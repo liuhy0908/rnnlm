@@ -216,16 +216,13 @@ class rnnlm(object):
 def test(test_fn , tst_stream):
     sums = 0
     case = 0
-    case_wrong = 0
     for sentence, sentence_mask in tst_stream.get_epoch_iterator():
         cost = test_fn(sentence.T, sentence_mask.T, 0)
         sums += cost[0]
         #case += sentence_mask[1:].sum()
         case += sentence_mask[:,1:].sum()
-        case_wrong += sentence_mask[1:].sum()
     ppl = numpy.exp(sums/case)
-    ppl_wrong = numpy.exp(sums/case_wrong)
-    return ppl, ppl_wrong
+    return ppl
 
 def detect_nan(i, node, fn):
     for output in fn.outputs:
@@ -292,15 +289,6 @@ if __name__=='__main__':
             vs = DStream(datatype='valid', config=cfig)
             ts = DStream(datatype='test', config=cfig)
 
-	    #mode = theano.compile.MonitorMode(post_func=detect_nan).excluding('local_elemwise_fusion', 'inplace')
-	    #mode_test = theano.compile.MonitorMode(post_func=detect_nan_test).excluding('local_elemwise_fusion', 'inplace')
-            #fn = theano.function([sentence, sentence_mask, use_noise], [cost_mean, struct_num], updates=updates, mode=mode)
-            #test_fn = theano.function([sentence, sentence_mask, use_noise], [cost_sum], mode=mode_test)
-
-	    #mode=NanGuardMode(nan_is_error=True, inf_is_error=True, big_is_error=True)
-            #fn = theano.function([sentence, sentence_mask, use_noise], [cost_mean, struct_num], updates=updates, mode=mode)
-            #test_fn = theano.function([sentence, sentence_mask, use_noise], [cost_sum], mode=mode)
-
             fn = theano.function([sentence, sentence_mask, use_noise, soft_clipping], [cost_mean, struct_num, nan_num, inf_num], updates=updates)
             test_fn = theano.function([sentence, sentence_mask, use_noise], [cost_sum])
 
@@ -346,8 +334,8 @@ if __name__=='__main__':
                             #print "."
                             # FIXME : if train size < check_freq, there will be no check point
                         else:
-                            valid_err, valid_err_wrong =test(test_fn, vs)
-                            test_err, test_err_wrong =test(test_fn, ts)
+                            valid_err = test(test_fn, vs)
+                            test_err = test(test_fn, ts)
                             checked_sum = 0
                             valid_errs.append(valid_err)
                             test_errs.append(test_err)
@@ -364,8 +352,8 @@ if __name__=='__main__':
                             elasped_minutes = (cur_time - start_time).total_seconds() / 60.
                             batch_elasped_seconds = (cur_time - pre_time).total_seconds()
                             #logger.info('{:>3} epoch {:>2} bad test/valid ppl {:>5.2f} {:>5.2f} i:m:tvbest {:>3} {:>3} {:>5.2f} {:>5.2f} {:>6.2f} min'.\
-                            print ('{:>3} epoch {:>2} bad test/valid(wrong) ppl {:>5.2f} {:>5.2f} {:>5.2f} {:>5.2f} i:m:tvbest {:>3} {:>3} {:>5.2f} {:>5.2f} batch {:>4.0f}s, all {:>5.1f}m nan {} inf {}'.\
-                                format(epoch, bad_counter, test_err, valid_err, test_err_wrong, valid_err_wrong, len(valid_errs)-1, valid_min_idx, valid_min_test, valid_min, batch_elasped_seconds, elasped_minutes, grad_nan_num, grad_inf_num));
+                            print ('{:>3} epoch {:>2} bad test/valid(wrong) ppl {:>5.2f} {:>5.2f} i:m:tvbest {:>3} {:>3} {:>5.2f} {:>5.2f} batch {:>4.0f}s, all {:>5.1f}m nan {} inf {}'.\
+                                format(epoch, bad_counter, test_err, valid_err , len(valid_errs)-1, valid_min_idx, valid_min_test, valid_min, batch_elasped_seconds, elasped_minutes, grad_nan_num, grad_inf_num));
                             sys.stdout.flush()
                             if bad_counter > patience:
                                 print "Early Stop! inner loop"
