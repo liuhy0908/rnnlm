@@ -21,7 +21,9 @@ def test2():
     print b
     print b[:,None]
     print m[b[:,None],[0 ,2]]
+def test3():
+    return 1
 
 
 if __name__ == "__main__":
-    test2()
+    test3()

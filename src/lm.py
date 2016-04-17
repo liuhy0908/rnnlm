@@ -1,6 +1,7 @@
 import theano
 import theano.tensor as T
-from model import GRU, LSTM, SLSTM, lookup_table, chunk_layer, dropout_layer, maxout_layer, rnn_pyramid_layer, LogisticRegression
+from model import NormalRNN , GRU, LSTM, SLSTM, lookup_table, chunk_layer, dropout_layer, maxout_layer, rnn_pyramid_layer, LogisticRegression
+from unit import FeedForward
 from utils import adadelta, step_clipping
 from stream import DStream
 import numpy
@@ -13,14 +14,10 @@ import pprint
 logger = logging.getLogger(__name__)
 
 class rnnlm(object):
-
-    def __init__(self, vocab_size, n_emb_lstm, n_emb_struct, n_emb_share, n_hids, n_shids, n_structs, dropout, **kwargs):
+    def __init__(self, vocab_size, n_emb_lstm, n_hids, n_structs, dropout, **kwargs):
         self.n_hids = n_hids
-        self.n_shids = n_shids # kwargs.pop('n_shids', n_hids)
         self.n_structs = n_structs
         self.n_emb_lstm = n_emb_lstm
-        self.n_emb_struct = n_emb_struct
-        self.n_emb_share = n_emb_share #kwargs.pop('n_emb_share', min(n_emb_lstm, n_emb_struct)/2)
         self.vocab_size = vocab_size
         self.dropout = dropout
 
@@ -29,8 +26,6 @@ class rnnlm(object):
 
     def apply(self, sentence, sentence_mask, use_noise=1):
         n_emb_lstm = self.n_emb_lstm
-        n_emb_struct = self.n_emb_struct
-        n_emb_share = self.n_emb_share
 
         src = sentence[:-1]
         src_mask = sentence_mask[:-1]
@@ -41,44 +36,17 @@ class rnnlm(object):
         table = lookup_table(n_emb_lstm, self.vocab_size, name='Wemb')
         state_below = table.apply(src, emb_lstm_range)
         self.layers.append(table)
+        # 4.17
+        #if self.dropout < 1.0:
+        #    state_below = dropout_layer(state_below, use_noise, self.dropout)
 
-        if self.dropout < 1.0:
-            state_below = dropout_layer(state_below, use_noise, self.dropout)
-
-        rnn = LSTM(n_emb_lstm, self.n_hids)
-        hiddens, cells = rnn.apply(state_below, src_mask)
-        #hiddens = rnn.merge_out(state_below, src_mask)
+        #rnn = LSTM(n_emb_lstm, self.n_hids)
+        rnn = NormalRNN(n_emb_lstm , self.n_hids)
+        hiddens  = rnn.apply(state_below, src_mask)
         self.layers.append(rnn)
 
-        if True:
-            if self.dropout < 1.0:
-                hiddens = dropout_layer(hiddens, use_noise, self.dropout)
-
-            rnn1 = LSTM(self.n_hids, self.n_hids)
-            hiddens, cells = rnn1.apply(hiddens, src_mask)
-            #hiddens = rnn.merge_out(state_below, src_mask)
-            self.layers.append(rnn1)
-
-        if False:
-            if self.dropout < 1.0:
-                hiddens = dropout_layer(hiddens, use_noise, self.dropout)
-
-            rnnp = rnn_pyramid_layer(self.n_hids, n_emb_lstm, self.n_hids)
-            hiddens,cells,structs,pyramid = rnnp.apply(hiddens, state_below, src_mask)
-            self.layers.append(rnnp)
-            #self.structs = structs
-            self.rnn_len = rnnp.n_steps
-        self.sent_len = sentence.shape[0]
-
-        if True:
-            maxout = maxout_layer()
-            states = T.concatenate([state_below, hiddens], axis=2)
-            maxout_n_fold = 2
-            hiddens = maxout.apply(states, n_emb_lstm + self.n_hids, self.n_hids, src_mask, maxout_n_fold)
-            self.layers.append(maxout)
-
-        if self.dropout < 1.0:
-            hiddens = dropout_layer(hiddens, use_noise, self.dropout)
+        #if self.dropout < 1.0:
+        #    hiddens = dropout_layer(hiddens, use_noise, self.dropout)
 
         logistic_layer = LogisticRegression(hiddens, self.n_hids, self.vocab_size)
         self.layers.append(logistic_layer)
@@ -130,6 +98,8 @@ def soft_clipping_curve(cur_epoch, last_curve_epoch, clip_begin, clip_end):
         cur_clip = clip_begin - cur_epoch * clip_step
     return cur_clip
 
+def test():
+    pass
 if __name__=='__main__':
     import configurations
     cfig = getattr(configurations, 'get_config_penn')()
@@ -144,10 +114,6 @@ if __name__=='__main__':
             use_noise = T.iscalar()
             lm = rnnlm(**cfig)
             lm.apply(sentence, sentence_mask, use_noise)
-
-            #struct_num = lm.structs.shape[0]
-            #struct_num = lm.rnn_len
-            struct_num = lm.sent_len
 
             cost_sum = lm.cost
             cost_mean = lm.cost/sentence.shape[1]
@@ -167,8 +133,8 @@ if __name__=='__main__':
             vs = DStream(datatype='valid', config=cfig)
             ts = DStream(datatype='test', config=cfig)
 
-            fn = theano.function([sentence, sentence_mask, use_noise, soft_clipping], [cost_mean, struct_num, nan_num, inf_num], updates=updates)
-            test_fn = theano.function([sentence, sentence_mask, use_noise], [cost_sum])
+            fn = theano.function([sentence, sentence_mask, use_noise, soft_clipping], [cost_mean, nan_num, inf_num], updates=updates , on_unused_input='ignore')
+            test_fn = theano.function([sentence, sentence_mask, use_noise], [cost_sum] , on_unused_input='ignore')
 
             start_time = datetime.now()
             cur_time = start_time
@@ -186,15 +152,13 @@ if __name__=='__main__':
                 #logger.info('{} epoch has been tackled with {} bad;'.format(epoch, bad_counter))
                 ds = DStream(datatype='train', config=cfig)
                 for data, mask in ds.get_epoch_iterator():
-                    #print "data: ", data.T[0,:];
-                    #print "mask: ", mask.T[0,:];
                     if cfig['drop_last_batch_if_small'] and (0.0 + len(data)) / cfig['batch_size'] < 0.95:
                         #logger.info('drop batch with: {}/{} ratio'.format(len(data), cfig['batch_size']))
                         pass # FIXME any idea to identify the last batch?
                     else:
                         cur_clip = soft_clipping_curve(epoch, cfig['soft_clipping_epoch'], cfig['soft_clipping_begin'], cfig['soft_clipping_end'])
                         cur_batch_time = datetime.now()
-                        c, sn, grad_nan_num, grad_inf_num = fn(data.T, mask.T, 1, cur_clip)
+                        c, grad_nan_num, grad_inf_num = fn(data.T, mask.T, 1, cur_clip)
                         batch_elasped_seconds = (datetime.now() - cur_batch_time).total_seconds()
                         logger.info('grad nan/inf num: {} {} at epoch {} cost {}'.format(grad_nan_num, grad_inf_num, epoch, batch_elasped_seconds))
                         #logger.info('lm.cost.mean: {}, {}'.format(c, sn))
@@ -229,7 +193,6 @@ if __name__=='__main__':
                             cur_time = datetime.now()
                             elasped_minutes = (cur_time - start_time).total_seconds() / 60.
                             batch_elasped_seconds = (cur_time - pre_time).total_seconds()
-                            #logger.info('{:>3} epoch {:>2} bad test/valid ppl {:>5.2f} {:>5.2f} i:m:tvbest {:>3} {:>3} {:>5.2f} {:>5.2f} {:>6.2f} min'.\
                             print ('{:>3} epoch {:>2} bad test/valid(wrong) ppl {:>5.2f} {:>5.2f} i:m:tvbest {:>3} {:>3} {:>5.2f} {:>5.2f} batch {:>4.0f}s, all {:>5.1f}m nan {} inf {}'.\
                                 format(epoch, bad_counter, test_err, valid_err, len(valid_errs)-1, valid_min_idx, valid_min_test, valid_min, batch_elasped_seconds, elasped_minutes, grad_nan_num, grad_inf_num));
                             sys.stdout.flush()

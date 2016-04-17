@@ -47,6 +47,5 @@ def get_config_penn():
     #config['eos_token'] = None
     config['unk_token'] = '<unk>'
 
-
     return config
 

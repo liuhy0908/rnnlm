@@ -60,6 +60,47 @@ class LogisticRegression(object):
         return T.sum(T.neq(y, y_pred))
 
 
+class NormalRNN(object):
+
+    def __init__(self , n_in , n_hids , with_contex=False , **kwargs):
+        self.n_in = n_in
+        self.n_hids = n_hids
+        self.with_contex = with_contex
+        if self.with_contex:
+            self.c_hids = kwargs.pop('c_hids' , n_hids)
+        self._init_params()
+
+    def _init_params(self):
+        size_xh = (self.n_in , self.n_hids)
+        size_hh = (self.n_hids , self.n_hids)
+        self.W_xh = param_init().uniform(size_xh)
+        self.W_hh = param_init().uniform(size_hh)
+        self.b = param_init().constant((self.n_hids,))
+        self.params = [self.W_xh , self.W_hh ,
+                       self.b]
+
+    def _step(self , x_t , x_m , h_tm1):
+        h_t = T.nnet.sigmoid(T.dot(x_t , self.W_xh)
+                             + T.dot(h_tm1 , self.W_hh) + self.b)
+        h_t = x_m[:,None] * h_t + (1. - x_m[:,None]) * h_tm1
+        return h_t
+
+    def apply(self, state_below, mask_below, init_state=None, context=None):
+        if state_below.ndim == 3:
+            batch_size = state_below.shape[1]
+            n_steps = state_below.shape[0]
+        else:
+            raise NotImplementedError
+        if init_state is None:
+            init_state = T.alloc(numpy.float32(0.) , batch_size , self.n_hids)
+        rval , updates = theano.scan(self._step,
+                                     sequences=[state_below , mask_below],
+                                     outputs_info=[init_state],
+                                     n_steps=n_steps)
+        self.output = rval
+        return self.output
+
+
 
 class GRU(object):
 
@@ -151,8 +192,6 @@ class GRU(object):
             n_steps = state_below.shape[0]
         else:
             raise NotImplementedError
-
-
         if self.with_contex:
             if init_state is None:
                 init_state = T.tanh(theano.dot(context, self.W_c_init))
