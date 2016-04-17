@@ -3,6 +3,7 @@ def get_config_penn():
     ####### network param #############
     config['seq_len'] = 80
     config['n_hids'] = 200
+    config['n_emb_morph'] = 200
     config['n_shids'] = 200                     # structure hidden dimension
     config['n_structs'] = 4
     config['n_emb_lstm'] = 200
@@ -28,10 +29,6 @@ def get_config_penn():
     config['check_freq'] = 5100
     config['check_low_freq'] = 50000
     config['check_low_freq_count'] = 1500000
-    ########### loop behave ##############
-    #config['check_freq'] = 51
-    #config['check_low_freq'] = 500
-    #config['check_low_freq_count'] = 1500
 
     ####### path ##############
     datadir = '../data/'

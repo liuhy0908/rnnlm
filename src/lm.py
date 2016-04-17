@@ -1,3 +1,4 @@
+#encoding=utf8
 import theano
 import theano.tensor as T
 from model import NormalRNN , GRU, LSTM, SLSTM, lookup_table, chunk_layer, dropout_layer, maxout_layer, rnn_pyramid_layer, LogisticRegression
@@ -65,7 +66,6 @@ def test(test_fn , tst_stream):
     for sentence, sentence_mask in tst_stream.get_epoch_iterator():
         cost = test_fn(sentence.T, sentence_mask.T, 0)
         sums += cost[0]
-        #case += sentence_mask[1:].sum()
         case += sentence_mask[:,1:].sum()
     ppl = numpy.exp(sums/case)
     return ppl
@@ -97,111 +97,100 @@ def soft_clipping_curve(cur_epoch, last_curve_epoch, clip_begin, clip_end):
         clip_step = clip_diff / last_curve_epoch
         cur_clip = clip_begin - cur_epoch * clip_step
     return cur_clip
-
-def test():
-    pass
 if __name__=='__main__':
     import configurations
     cfig = getattr(configurations, 'get_config_penn')()
-    if True:
-    #for batch_size in [100]:
-    #for nhids in [64 * i for i in [1,2,4,8]]:
-        #for nemb in [64 * i for i in [1,2,4,8]]:
-            logger.info("\nModel options:\n{}".format(pprint.pformat(cfig)))
+    logger.info("\nModel options:\n{}".format(pprint.pformat(cfig)))
 
-            sentence = T.lmatrix()
-            sentence_mask = T.matrix()
-            use_noise = T.iscalar()
-            lm = rnnlm(**cfig)
-            lm.apply(sentence, sentence_mask, use_noise)
+    sentence = T.lmatrix()
+    sentence_mask = T.matrix()
+    use_noise = T.iscalar()
+    lm = rnnlm(**cfig)
+    lm.apply(sentence, sentence_mask, use_noise)
 
-            cost_sum = lm.cost
-            cost_mean = lm.cost/sentence.shape[1]
+    cost_sum = lm.cost
+    cost_mean = lm.cost/sentence.shape[1]
 
-            params = lm.params
-            regular = lm.L1 * 1e-5 + lm.L2 * 1e-5
+    params = lm.params
+    regular = lm.L1 * 1e-5 + lm.L2 * 1e-5
 
-            grads = T.grad(cost_mean, params)
+    grads = T.grad(cost_mean, params)
 
-            hard_clipping = cfig['hard_clipping']
-            soft_clipping = T.fscalar()
-	    #if cfig['soft_clipping_begin'] > 0.:
-            skip_nan_batch = 0
-            grads, nan_num, inf_num = step_clipping(params, grads, soft_clipping, cfig['shrink_scale_after_skip_nan_grad'], cfig['skip_nan_grad'])
+    hard_clipping = cfig['hard_clipping']
+    soft_clipping = T.fscalar()
+    skip_nan_batch = 0
+    grads, nan_num, inf_num = step_clipping(params, grads, soft_clipping, cfig['shrink_scale_after_skip_nan_grad'], cfig['skip_nan_grad'])
 
-            updates = adadelta(params, grads, hard_clipping)
-            vs = DStream(datatype='valid', config=cfig)
-            ts = DStream(datatype='test', config=cfig)
+    updates = adadelta(params, grads, hard_clipping)
+    vs = DStream(datatype='valid', config=cfig)
+    ts = DStream(datatype='test', config=cfig)
 
-            fn = theano.function([sentence, sentence_mask, use_noise, soft_clipping], [cost_mean, nan_num, inf_num], updates=updates , on_unused_input='ignore')
-            test_fn = theano.function([sentence, sentence_mask, use_noise], [cost_sum] , on_unused_input='ignore')
+    fn = theano.function([sentence, sentence_mask, use_noise, soft_clipping], [cost_mean, nan_num, inf_num], updates=updates , on_unused_input='ignore')
+    test_fn = theano.function([sentence, sentence_mask, use_noise], [cost_sum] , on_unused_input='ignore')
 
-            start_time = datetime.now()
-            cur_time = start_time
-            print ('training start at {}'.format(start_time))
+    start_time = datetime.now()
+    cur_time = start_time
+    print ('training start at {}'.format(start_time))
 
-            valid_errs = []
-            test_errs = []
-            patience = 200
-            bad_counter = 0
+    valid_errs = []
+    test_errs = []
+    patience = 200
+    bad_counter = 0
 
-            checked_sum = 0
-            checked_sum_all = 0
-            check_freq = 5000
-            for epoch in range(500):
-                #logger.info('{} epoch has been tackled with {} bad;'.format(epoch, bad_counter))
-                ds = DStream(datatype='train', config=cfig)
-                for data, mask in ds.get_epoch_iterator():
-                    if cfig['drop_last_batch_if_small'] and (0.0 + len(data)) / cfig['batch_size'] < 0.95:
-                        #logger.info('drop batch with: {}/{} ratio'.format(len(data), cfig['batch_size']))
-                        pass # FIXME any idea to identify the last batch?
-                    else:
-                        cur_clip = soft_clipping_curve(epoch, cfig['soft_clipping_epoch'], cfig['soft_clipping_begin'], cfig['soft_clipping_end'])
-                        cur_batch_time = datetime.now()
-                        c, grad_nan_num, grad_inf_num = fn(data.T, mask.T, 1, cur_clip)
-                        batch_elasped_seconds = (datetime.now() - cur_batch_time).total_seconds()
-                        logger.info('grad nan/inf num: {} {} at epoch {} cost {}'.format(grad_nan_num, grad_inf_num, epoch, batch_elasped_seconds))
-                        #logger.info('lm.cost.mean: {}, {}'.format(c, sn))
-                        #valid_err=test(test_fn, vs)
-                        #test_err=test(test_fn, ts)
-		        #logger.info('valid, test ppl : {}, {}'.format(valid_err, test_err))
-                        checked_sum_all += cfig['batch_size']
-                        if checked_sum_all < cfig['check_low_freq_count']:
-                            check_freq = cfig['check_low_freq']
-                        else:
-                            check_freq = cfig['check_freq']
-                        if checked_sum < check_freq:
-                            checked_sum += cfig['batch_size']
-                            #print checked_sum/cfig['check_freq'], '\r'
-                            #print "."
-                            # FIXME : if train size < check_freq, there will be no check point
-                        else:
-                            valid_err = test(test_fn, vs)
-                            test_err = test(test_fn, ts)
-                            checked_sum = 0
-                            valid_errs.append(valid_err)
-                            test_errs.append(test_err)
-                            if valid_err <= numpy.array(valid_errs).min():
-                                bad_counter = 0
-                            if len(valid_errs) > patience and valid_err >= \
-                                numpy.array(valid_errs)[:-patience].min():
-                                bad_counter += 1
-                            valid_min = numpy.min(valid_errs)
-                            valid_min_idx = numpy.argmin(valid_errs)
-                            valid_min_test = test_errs[valid_min_idx]
-                            pre_time = cur_time
-                            cur_time = datetime.now()
-                            elasped_minutes = (cur_time - start_time).total_seconds() / 60.
-                            batch_elasped_seconds = (cur_time - pre_time).total_seconds()
-                            print ('{:>3} epoch {:>2} bad test/valid(wrong) ppl {:>5.2f} {:>5.2f} i:m:tvbest {:>3} {:>3} {:>5.2f} {:>5.2f} batch {:>4.0f}s, all {:>5.1f}m nan {} inf {}'.\
-                                format(epoch, bad_counter, test_err, valid_err, len(valid_errs)-1, valid_min_idx, valid_min_test, valid_min, batch_elasped_seconds, elasped_minutes, grad_nan_num, grad_inf_num));
-                            sys.stdout.flush()
-                            if bad_counter > patience:
-                                print "Early Stop! inner loop"
-                                break
-                if bad_counter > patience:
-                    print "Early Stop! outter loop"
-                    break
+    checked_sum = 0
+    checked_sum_all = 0
+    check_freq = 5000
+    for epoch in range(500):
+        #logger.info('{} epoch has been tackled with {} bad;'.format(epoch, bad_counter))
+        ds = DStream(datatype='train', config=cfig)
+        for data, mask in ds.get_epoch_iterator():
+            if cfig['drop_last_batch_if_small'] and (0.0 + len(data)) / cfig['batch_size'] < 0.95:
+                #logger.info('drop batch with: {}/{} ratio'.format(len(data), cfig['batch_size']))
+                pass # FIXME any idea to identify the last batch?
+            else:
+                cur_clip = soft_clipping_curve(epoch, cfig['soft_clipping_epoch'], cfig['soft_clipping_begin'], cfig['soft_clipping_end'])
+                cur_batch_time = datetime.now()
+                c, grad_nan_num, grad_inf_num = fn(data.T, mask.T, 1, cur_clip)
+                batch_elasped_seconds = (datetime.now() - cur_batch_time).total_seconds()
+                logger.info('grad nan/inf num: {} {} at epoch {} cost {}'.format(grad_nan_num, grad_inf_num, epoch, batch_elasped_seconds))
+                #checked_sum_all记录总共训练的句子数
+                checked_sum_all += cfig['batch_size']
+                if checked_sum_all < cfig['check_low_freq_count']:
+                    check_freq = cfig['check_low_freq']
+                else:
+                    check_freq = cfig['check_freq']
+                #表示每训练check_freq个句子后对valid和test算ppl
+                #check_freq记录这一轮已经训练的句子树
+                if checked_sum < check_freq:
+                    checked_sum += cfig['batch_size']
+                    # FIXME : if train size < check_freq, there will be no check point
+                else:
+                    valid_err = test(test_fn, vs)
+                    test_err = test(test_fn, ts)
+                    checked_sum = 0
+                    valid_errs.append(valid_err)
+                    test_errs.append(test_err)
+                    if valid_err <= numpy.array(valid_errs).min():
+                        bad_counter = 0
+                    if len(valid_errs) > patience and valid_err >= \
+                        numpy.array(valid_errs)[:-patience].min():
+                        bad_counter += 1
+                    valid_min = numpy.min(valid_errs)
+                    valid_min_idx = numpy.argmin(valid_errs)
+                    valid_min_test = test_errs[valid_min_idx]
+                    pre_time = cur_time
+                    cur_time = datetime.now()
+                    elasped_minutes = (cur_time - start_time).total_seconds() / 60.
+                    batch_elasped_seconds = (cur_time - pre_time).total_seconds()
+                    print ('{:>3} epoch {:>2} bad test/valid(wrong) ppl {:>5.2f} {:>5.2f} i:m:tvbest {:>3} {:>3} {:>5.2f} {:>5.2f} batch {:>4.0f}s, all {:>5.1f}m nan {} inf {}'.\
+                        format(epoch, bad_counter, test_err, valid_err, len(valid_errs)-1, valid_min_idx, valid_min_test, valid_min, batch_elasped_seconds, elasped_minutes, grad_nan_num, grad_inf_num));
+                    sys.stdout.flush()
+                    if bad_counter > patience:
+                        print "Early Stop! inner loop"
+                        break
+        if bad_counter > patience:
+            print "Early Stop! outter loop"
+            break
 
             valid_min = numpy.min(valid_errs)
             valid_min_idx = numpy.argmin(valid_errs)
