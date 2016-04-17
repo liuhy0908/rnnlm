@@ -6,7 +6,7 @@
 TASKNAME=test_lm
 LOGFILE=${TASKNAME}.log
 ERRFILE=${TASKNAME}.err
-BINNAME=../src/language_model.py
+BINNAME=../src/lm.py
 LINKNAME=${TASKNAME}.link
 ln -s $BINNAME $LINKNAME
 THEANO_FLAGS=device=gpu0,floatX=float32 nohup python $LINKNAME 1>>$LOGFILE 2>$ERRFILE & 
