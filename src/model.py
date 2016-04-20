@@ -1,8 +1,7 @@
 import theano
 import theano.tensor as T
 import numpy
-from utils import param_init, repeat_x
-from mfd_utils import concatenate
+from utils import param_init, repeat_x, concatenate
 from theano.tensor.nnet import categorical_crossentropy
 from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
 from unit import GRU as GRU_Z
@@ -415,6 +414,103 @@ class LSTM(object):
         return merge_max * mask_below[:, :, None]
 
 
+class FLSTM(object):
+
+    def __init__(self, n_in, n_hids, with_contex=False, **kwargs):
+        self.n_in = n_in
+        self.n_hids = n_hids
+        self.with_contex = with_contex
+        if self.with_contex:
+            self.c_hids = kwargs.pop('c_hids', n_hids)
+        self._init_params()
+
+    def _init_params(self):
+        n_in = self.n_in
+        n_hids = self.n_hids
+        size_xh = (n_in, n_hids)
+        size_hh = (n_hids, n_hids)
+        self.W_xi = param_init().normal(size_xh)
+        self.W_xf = param_init().normal(size_xh)
+        self.W_xo = param_init().normal(size_xh)
+        self.W_xc = param_init().normal(size_xh)
+
+        self.W_hi = param_init().orth(size_hh)
+        self.W_hf = param_init().orth(size_hh)
+        self.W_ho = param_init().orth(size_hh)
+        self.W_hc = param_init().orth(size_hh)
+
+        self.b_i = param_init().constant((n_hids,))
+        self.b_f = param_init().constant((n_hids,), scale=1.0) #  Jozefowicz et al. 2015
+        self.b_o = param_init().constant((n_hids,))
+        self.b_c = param_init().constant((n_hids,))
+
+        self.params = [self.W_xi, self.W_xf, self.W_xo, self.W_xc,
+                       self.W_hi, self.W_hf, self.W_ho, self.W_hc,
+                       self.b_i, self.b_f, self.b_o, self.b_c]
+
+        self.attention = ATT(self.n_hids)
+        self.W_at = param_init().normal(size_hh)
+        self.W_comb = param_init().normal(size_hh)
+        self.W_comb2 = param_init().normal(size_hh)
+        self.b_at = param_init().constant((n_hids,))
+        self.b_comb = param_init().constant((n_hids,))
+
+        self.params = self.params + [self.W_at , self.b_at,
+                                     self.W_comb , self.W_comb2 , self.b_comb]
+
+    def _step_forward(self, x_t, x_m, t , h_tm1, c_tm1 , his):
+        '''
+        x_t: input at time t
+        x_m: mask of x_t
+        h_tm1: previous state
+        c_tm1: previous memory cell
+        '''
+        i_t = T.nnet.sigmoid(T.dot(x_t, self.W_xi) +
+                             T.dot(h_tm1, self.W_hi) + self.b_i)
+
+        f_t = T.nnet.sigmoid(T.dot(x_t, self.W_xf) +
+                             T.dot(h_tm1, self.W_hf) + self.b_f)
+
+        o_t = T.nnet.sigmoid(T.dot(x_t, self.W_xo) +
+                             T.dot(h_tm1, self.W_ho) + self.b_o)
+
+        c_t = T.tanh(T.dot(x_t, self.W_xc) +
+                             T.dot(h_tm1, self.W_hc) + self.b_c)
+
+        c_t = f_t * c_tm1 + i_t * c_t
+        c_t = x_m[:, None] * c_t + (1. - x_m[:, None]) * c_tm1
+
+        h_t = o_t * T.tanh(c_t)
+        h_t = x_m[:, None] * h_t + (1. - x_m[:, None]) * h_tm1
+
+        pre_ctx = T.dot(his[0:t-1] , self.W_at) + self.b_at
+        ctx_psum , alphaT = self.attention.apply(h_t , pre_ctx , his[0:t-1])
+        h_2 = T.nnet.sigmoid(T.dot(ctx_psum , self.W_comb) +
+                             T.dot(h_t , self.W_comb2) + self.b_comb)
+        h_2 = x_m[:,None] * h_2 + (1. - x_m[: , None]) * h_tm1
+        T.set_subtensor(his[t,:] , h_2)
+        return h_2, c_t
+
+    def apply(self, state_below, mask_below, init_state=None, context=None):
+        if state_below.ndim == 3:
+            batch_size = state_below.shape[1]
+            n_steps = state_below.shape[0]
+        else:
+            raise NotImplementedError
+        if init_state is None:
+            init_state = T.alloc(numpy.float32(0.), batch_size, self.n_hids)
+            init_state1 = T.alloc(numpy.float32(0.), batch_size, self.n_hids)
+        init_state2 = T.alloc(numpy.float32(0.) , n_steps , batch_size , self.n_hids)
+        step_idx = T.arange(n_steps)
+        rval, updates = theano.scan(self._step_forward,
+                                    sequences=[state_below, mask_below ,step_idx],
+                                    outputs_info=[init_state, init_state1],
+                                    non_sequences=[init_state2],
+                                    n_steps=n_steps
+                                    )
+        self.output = rval
+        return self.output
+
 class SLSTM(object):
 
     def __init__(self, n_emb_lstm, n_emb_struct, n_emb_share, n_hids, n_shids, n_structs, with_contex=False, **kwargs):
@@ -617,180 +713,6 @@ class SLSTM(object):
         self.b_m = param_init().constant((osize*2,), 'b_m')
         self.params += [self.W_m, self.b_m]
 
-        merge_out = theano.dot(combine, self.W_m) + self.b_m
-        merge_max = merge_out.reshape((merge_out.shape[0],
-                                       merge_out.shape[1],
-                                       merge_out.shape[2]/2,
-                                       2), ndim=4).max(axis=3)
-        return merge_max * mask_below[:, :, None]
-
-class chunk_layer(object):
-
-    def __init__(self, n_in_struct, n_in_gating, n_out, n_structs, **kwargs):
-
-        self.n_in_struct = n_in_struct
-        self.n_in_gating = n_in_gating
-        self.n_out = n_out # kwargs.pop('n_shids', n_hids)
-        self.n_structs = n_structs
-
-        self.n_structs_sum = sum(range(1, n_structs+1))
-
-        self._init_params()
-
-    def _init_params(self):
-
-        n_in_struct = self.n_in_struct
-        n_in_gating = self.n_in_gating
-        n_structs   = self.n_structs
-        n_structs_sum = self.n_structs_sum
-        n_out = self.n_out
-
-        shape_isso= (n_in_struct,  n_structs_sum * n_out)
-        shape_igso= (n_in_gating,  n_structs_sum * n_out)
-
-        self.W_isso = param_init().normal(shape_isso, 'W_isso')
-        self.W_igso = param_init().normal(shape_igso, 'W_igso')
-
-        self.b_s = param_init().constant((n_structs * n_out,), 'b_s')
-        self.b_g = param_init().constant((n_structs * n_out,), 'b_g')
-
-        self.params = [self.W_isso, self.W_igso, self.b_s, self.b_g]
-
-    def _step_forward(self, x_t, g_t, x_m, s_tm1, g_tm1):
-        '''
-        x_t: input at time t
-        x_m: mask of x_t
-        h_tm1: previous state
-        c_tm1: previous memory cell
-        '''
-        '''
-        i_t = T.nnet.sigmoid(T.dot(x_t, self.W_xi) +
-                             T.dot(h_tm1, self.W_hi) + self.b_i)
-
-        f_t = T.nnet.sigmoid(T.dot(x_t, self.W_xf) +
-                             T.dot(h_tm1, self.W_hf) + self.b_f)
-
-        o_t = T.nnet.sigmoid(T.dot(x_t, self.W_xo) +
-                             T.dot(h_tm1, self.W_ho) + self.b_o)
-
-        c_t = T.tanh(T.dot(x_t, self.W_xc) +
-                             T.dot(h_tm1, self.W_hc) + self.b_c)
-
-        c_t = f_t * c_tm1 + i_t * c_t
-        c_t = x_m[:, None] * c_t + (1. - x_m[:, None]) * c_tm1
-
-        # compute structure
-        batch_size = x_t.shape[0]
-
-        s = T.tanh(s + T.dot(c_t, self.W_cs))
-        s = s.reshape([batch_size, self.n_structs, self.n_shids])
-
-        ss = T.nnet.sigmoid(ss + T.dot(c_t, self.W_css))
-        ss = T.nnet.softmax(ss.reshape([batch_size * self.n_structs, self.n_shids]))
-        ss = ss.reshape([batch_size, self.n_structs, self.n_shids])
-        '''
-
-        '''
-        s_t = x_t * g_t
-        s_t = s_t.sum(axis=1) # TODO: use s_tm1 in construct s
-        s_t = x_m[:, None] * s_t + (1. - x_m[:, None])*s_tm1
-
-        h_t = o_t * T.tanh(c_t)
-        # include structure in construct hidden state
-        h_t = T.tanh(T.dot(s_t, self.W_s_h) + T.dot(h_t, self.W_h_h)+ self.b_s_h)
-        h_t = x_m[:, None] * h_t + (1. - x_m[:, None])*h_tm1
-        return h_t, c_t, s_t
-        '''
-        return
-
-    # utitlity function for transfer unsliced history state into correct order
-    def shift_combine(self, inputs, dimension, n_structs):
-        dim = dimension
-        ns = n_structs
-        rval = inputs[:,:,:ns*dim]
-        end = ns
-        for i in range(1, ns):
-            s_len = ns - i
-            begin = end
-            end = begin + s_len
-            rval = T.set_subtensor( rval[i:,:,i*dim:],  \
-                                    rval[i:,:,i*dim:] + \
-                                    inputs[i:,:,begin*dim:end*dim])
-        return rval
-
-    def apply(self, state_below_for_struct, state_below_for_gating, mask_below, init_state_s=None, init_state_g=None):
-        if state_below_for_struct.ndim == 3:
-            batch_size = state_below_for_struct.shape[1]
-            n_steps = state_below_for_struct.shape[0]
-        else:
-            raise NotImplementedError
-
-        # input to the gates, concatenated
-        state_below_s = T.dot(state_below_for_struct, self.W_isso)
-        state_below_g = T.dot(state_below_for_gating, self.W_igso)
-
-        struct = T.tanh(self.shift_combine(state_below_s, self.n_out, self.n_structs) + self.b_s)
-        gating = T.nnet.sigmoid(self.shift_combine(state_below_g, self.n_out, self.n_structs) + self.b_g)
-
-        struct = struct.reshape([n_steps,  batch_size, self.n_structs, self.n_out])
-        #gating = T.nnet.softmax(gating.reshape([n_steps * batch_size * self.n_structs, self.n_shids]))
-        gating = gating.reshape([n_steps, batch_size, self.n_structs, self.n_out]).dimshuffle(0, 1, 3, 2)
-        gating = T.nnet.softmax(gating.reshape([n_steps * batch_size * self.n_out, self.n_structs]))
-        gating = gating.reshape([n_steps,  batch_size, self.n_out, self.n_structs]).dimshuffle(0, 1, 3, 2)
-        '''
-        '''
-
-        struct = struct * gating
-        '''
-        struct = struct.reshape([n_steps,  batch_size, self.n_structs, self.n_out])
-        '''
-        struct = struct.sum(axis=2) # TODO: use s_tm1 in construct s
-        return struct
-
-        '''
-        if init_state_s is None:
-            init_state_s = T.alloc(numpy.float32(0.), batch_size, self.n_shids)
-        if init_state_g is None:
-            init_state_g = T.alloc(numpy.float32(0.), batch_size, self.n_shids)
-        seq = [state_below_s, state_below_g, mask_below, struct, gating]
-        outs= [init_state_s, init_state_g],
-        rval, updates = theano.scan(self._step_forward,
-                                    sequences=seq,
-                                    outputs_info=outs,
-                                    n_steps=n_steps
-                                    )
-        self.output = rval
-        return self.output
-        '''
-
-    def merge_out(self, state_below_for_struct, state_below_for_gating, mask_below, merge_how="for_struct", state_below_other=None, n_other=0):
-        struct = self.apply(state_below_for_struct, state_below_for_gating, mask_below)
-        msize = self.n_out
-        osize = self.n_out
-        combine = struct
-        if merge_how == "none":
-            pass
-        elif merge_how == "for_struct":
-            msize += self.n_in_struct
-            combine = T.concatenate([state_below_for_struct, combine], axis=2)
-        elif merge_how == "for_gating":
-            msize += self.n_in_gating
-            combine = T.concatenate([state_below_for_gating, combine], axis=2)
-        elif merge_how == "both":
-            msize += self.n_in_struct + self.n_in_gating
-            combine = T.concatenate([state_below_for_struct, state_below_for_gating, combine], axis=2)
-        else:
-            raise NotImplementedError
-
-        if state_below_other is not None:
-            msize += n_other
-            combine = T.concatenate([state_below_other, combine], axis=2)
-
-        self.W_m = param_init().normal((msize, osize*2), 'W_m')
-        self.b_m = param_init().constant((osize*2,), 'b_m')
-        self.params += [self.W_m, self.b_m]
-
-        # use maxout
         merge_out = theano.dot(combine, self.W_m) + self.b_m
         merge_max = merge_out.reshape((merge_out.shape[0],
                                        merge_out.shape[1],

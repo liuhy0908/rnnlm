@@ -2,6 +2,7 @@ import theano
 import theano.tensor as T
 import numpy
 import logging
+from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
 from itertools import izip
 
 logger = logging.getLogger(__name__)
@@ -155,3 +156,32 @@ def step_clipping(params, gparams, scale=1., nan_scale=1, skip_nan_batch=1):
 
     return  params_clipping, nan_num, inf_num
 
+# make prefix-appended name
+def _p(pp, name):
+    return '%s_%s' % (pp, name)
+
+def ReplicateLayer(x, n_times):
+    a = T.shape_padleft(x)
+    padding = [1] * x.ndim
+    b = T.alloc(numpy.float32(1), n_times, *padding)
+    return a * b
+
+def concatenate(tensor_list, axis=0):
+    concat_size = sum(tt.shape[axis] for tt in tensor_list)
+    for k in range(axis):
+        output_shape += (tensor_list[0].shape[k],)
+    output_shape += (concat_size,)
+    for k in range(axis + 1, tensor_list[0].ndim):
+        output_shape += (tensor_list[0].shape[k],)
+    out = T.zeros(output_shape)
+    offset = 0
+    for tt in tensor_list:
+        indices = ()
+        for k in range(axis):
+            indices += (slice(None),)
+        indices += (slice(offset, offset + tt.shape[axis]),)
+        for k in range(axis + 1, tensor_list[0].ndim):
+            indices += (slice(None),)
+        out = T.set_subtensor(out[indices], tt)
+        offset += tt.shape[axis]
+    return out

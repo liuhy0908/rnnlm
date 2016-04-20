@@ -1,6 +1,10 @@
 #encoding=utf8
 import cPickle as pickle
 import numpy
+import fuel.datasets import TextFile
+import fuel.schemes import ConstantScheme
+import fuel.streams import DataStream
+import fuel.transformers import Batch , Padding
 def test():
     fin = open("../data/train_dic.pkl" , "r")
     dic = pickle.load(fin)

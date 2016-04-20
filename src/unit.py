@@ -4,7 +4,7 @@ import theano
 import theano.tensor as T
 from initialization import constant_weight, uniform_weight, ortho_weight, multi_orth, norm_weight
 from theano.tensor.nnet import categorical_crossentropy
-from mfd_utils import ReplicateLayer, _p, concatenate
+from utils import ReplicateLayer, _p, concatenate
 #from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
 from numpy.random import RandomState as RandomStreams # FIXME: make it right
 
@@ -22,7 +22,6 @@ def _slice(_x, n, dim):
 class ATTENTION(object):
 
     def __init__(self, n_hids, rng=RandomStreams(1234), name='ATTENTION'):
-
         self.n_hids = n_hids
         self.rng = rng
         self.pname = name
@@ -30,9 +29,7 @@ class ATTENTION(object):
         self._init_params()
 
     def _init_params(self):
-
         shape_hh = (self.n_hids, self.n_hids)
-
         self.W_comb_att = norm_weight(rng=self.rng, shape=shape_hh, name=_p(self.pname, 'W_comb_att'))
         self.U_att = norm_weight(rng=self.rng, shape=(self.n_hids, 1), name=_p(self.pname, 'U_att'))
         self.c_att = constant_weight(shape=(1,), name=_p(self.pname, 'c_att'))
@@ -60,7 +57,7 @@ class ATTENTION(object):
 
         return ctx_psum, alpha.T
 
-        
+
     def apply_3d_h(self, h, pre_ctx, ctx, ctx_mask=None):
         '''
         h: h.shape = [batch, trg_len, hid]
@@ -129,7 +126,7 @@ class FF2_1(object):
         shape_io = (self.n_in_0, self.n_out)
 
         if self.orth:
-            if self.n_in_0 != self.n_out: 
+            if self.n_in_0 != self.n_out:
                 raise ValueError('n_in != n_out when require orth in FeedForward')
             self.W = ortho_weight(rng=self.rng, shape=shape_io, name=_p(self.pname, 'W'))
         else:
@@ -139,7 +136,7 @@ class FF2_1(object):
         self.ff =  FeedForward(self.n_in_1, self.n_out, orth=self.orth, rng=self.rng, name=_p(self.pname, 'FF_W') )
         self.params.extend(self.ff.params)
 
-    def apply(self, state_below_0, state_below_1, activ='lambda x: theano.tensor.tanh(x)'): 
+    def apply(self, state_below_0, state_below_1, activ='lambda x: theano.tensor.tanh(x)'):
         return eval(activ)(T.dot(state_below, self.W) + ff.apply(state_below_1, activ='lambda x: x')) #FIXME: eval() arg1 must be string?
 
 class FF2(object):
@@ -235,7 +232,6 @@ class GRU(object):
 
 
     def _init_params(self):
-
         shape_xh = (self.n_in, self.n_hids)
         shape_xh2 = (self.n_in, 2*self.n_hids)
         shape_hh = (self.n_hids, self.n_hids)
@@ -251,7 +247,7 @@ class GRU(object):
         self.params += [self.W_xzr, self.W_xh,
                         self.W_hzr, self.W_hh,
                         self.b_zr,  self.b_h]
-        
+
         if self.with_context:
             shape_ch = (self.c_hids, self.n_hids)
             self.W_cz = norm_weight(rng=self.rng, shape=shape_ch, name=_p(self.pname, 'W_cz'))
@@ -260,19 +256,19 @@ class GRU(object):
             self.W_c_init = norm_weight(rng=self.rng, shape=shape_ch, name=_p(self.pname, 'W_c_init'))
 
             self.params += [self.W_cz, self.W_cr, self.W_ch, self.W_c_init]
-        
+
         if self.with_begin_tag:
-            self.struct_begin_tag = constant_weight(shape=(self.n_hids,), value=0., name=_p(self.pname, 'struct_begin_tag')) 
+            self.struct_begin_tag = constant_weight(shape=(self.n_hids,), value=0., name=_p(self.pname, 'struct_begin_tag'))
             self.params += [self.struct_begin_tag]
 
         if self.with_end_tag:
-            self.struct_end_tag = constant_weight(shape=(self.n_in,), value=0., name=_p(self.pname, 'struct_end_tag')) 
+            self.struct_end_tag = constant_weight(shape=(self.n_in,), value=0., name=_p(self.pname, 'struct_end_tag'))
             self.params += [self.struct_end_tag]
 
         if self.n_att_ctx:
             self.gru_combine_ctx_h = GRU(self.n_att_ctx, self.n_hids, rng=self.rng, name=_p(self.pname, 'gru_combine_ctx_h'))
             self.params.extend(self.gru_combine_ctx_h.params)
-            self.attention = ATTENTION(self.n_hids, self.rng, name=_p(self.pname, 'att_ctx')) 
+            self.attention = ATTENTION(self.n_hids, self.rng, name=_p(self.pname, 'att_ctx'))
             self.params.extend(self.attention.params)
 
     def _pyramid_attention_step_lazy(self, x_t, x_m, t, h_tm1, pre_ctx, ctx, ctx_mask=None):
@@ -300,7 +296,6 @@ class GRU(object):
 
         h_t = h_2
         return h_t
-
 
     def _pyramid_step_lazy(self, x_t, x_m, t, h_tm1):
         '''
@@ -401,7 +396,7 @@ class GRU(object):
         if x_h.ndim == 1 :
             xm = x_m
         elif x_h.ndim == 2 :
-            xm = x_m[:,None] 
+            xm = x_m[:,None]
         elif x_h.ndim == 3 :
             xm = x_m[:,None,None]
         elif x_h.ndim == 4 :
@@ -543,12 +538,11 @@ class GRU(object):
 class LSTM(object):
 
     def __init__(self, n_in, n_hids, n_att_ctx=None, seq_pyramid=False, rng=RandomStreams(1234), name='LSTM', with_context=False, with_begin_tag=False, with_end_tag=False):
-
         self.n_in = n_in
         self.n_hids = n_hids
         self.rng = rng
         self.n_att_ctx = n_att_ctx
-        self.seq_pyramid = seq_pyramid 
+        self.seq_pyramid = seq_pyramid
         self.pname = name
 
         self.with_context = with_context
@@ -559,8 +553,6 @@ class LSTM(object):
 
         self.params = []
         self._init_params()
-
-
     def _init_params(self):
 
         shape_xh = (self.n_in, self.n_hids)
@@ -579,29 +571,22 @@ class LSTM(object):
         self.b_pre_x = theano.shared(value=b_ifoc, borrow=True, name=_p(self.pname, 'b_pre_x'))
 
         self.params += [self.W_pre_x, self.W_h, self.b_pre_x]
-        
+
         if self.with_context:
             raise NotImplementedError
-            #shape_ch = (self.c_hids, self.n_hids)
-            #self.W_cz = norm_weight(rng=self.rng, shape=shape_ch, name=_p(self.pname, 'W_cz'))
-            #self.W_cr = norm_weight(rng=self.rng, shape=shape_ch, name=_p(self.pname, 'W_cr'))
-            #self.W_ch = norm_weight(rng=self.rng, shape=shape_ch, name=_p(self.pname, 'W_ch'))
-            #self.W_c_init = norm_weight(rng=self.rng, shape=shape_ch, name=_p(self.pname, 'W_c_init'))
 
-            #self.params += [self.W_cz, self.W_cr, self.W_ch, self.W_c_init]
-        
         if self.with_begin_tag:
-            self.struct_begin_tag = constant_weight(shape=(self.n_hids,), value=0., name=_p(self.pname, 'struct_begin_tag')) 
+            self.struct_begin_tag = constant_weight(shape=(self.n_hids,), value=0., name=_p(self.pname, 'struct_begin_tag'))
             self.params += [self.struct_begin_tag]
 
         if self.with_end_tag:
-            self.struct_end_tag = constant_weight(shape=(self.n_in,), value=0., name=_p(self.pname, 'struct_end_tag')) 
+            self.struct_end_tag = constant_weight(shape=(self.n_in,), value=0., name=_p(self.pname, 'struct_end_tag'))
             self.params += [self.struct_end_tag]
 
         if self.n_att_ctx:
             self.lstm_combine_ctx_h = LSTM(self.n_att_ctx, self.n_hids, rng=self.rng, name=_p(self.pname, 'lstm_combine_ctx_h'))
             self.params.extend(self.lstm_combine_ctx_h.params)
-            self.attention = ATTENTION(self.n_hids, self.rng, name=_p(self.pname, 'att_ctx')) 
+            self.attention = ATTENTION(self.n_hids, self.rng, name=_p(self.pname, 'att_ctx'))
             self.params.extend(self.attention.params)
             if self.seq_pyramid:
                 self.pyramid_on_seq = LSTM(self.n_att_ctx, self.n_att_ctx, rng=self.rng, name=_p(self.pname, 'pyramid_on_seq'))
@@ -635,9 +620,7 @@ class LSTM(object):
 
         h_t = h_2
         c_t = c_2
-
         return h_t, c_t
-
 
     def _seq_pyramid_step(self, pre_x_t, pre_xp_t, x_m, t, h_tm1, c_tm1, hp_tm1, cp_tm1):
         '''
@@ -663,10 +646,8 @@ class LSTM(object):
         h_2, c_2 = self.lstm_combine_ctx_h._step_lazy(ctx_psum, x_m, h_1, c_1)
         h_2 = xm * h_2 + (1. - xm)*h_tm1
         c_2 = xm * c_2 + (1. - xm)*c_tm1
-
         h_t = h_2
         c_t = c_2
-
         return h_t, c_t, hp_t, cp_t
 
     def _pyramid_step_lazy(self, x_t, x_m, t, h_tm1, c_tm1):
@@ -758,7 +739,7 @@ class LSTM(object):
         if   pre_x_t.ndim == 1 :
             xm = x_m
         elif pre_x_t.ndim == 2 :
-            xm = x_m[:,None] 
+            xm = x_m[:,None]
         elif pre_x_t.ndim == 3 :
             xm = x_m[:,None,None]
         elif pre_x_t.ndim == 4 :
@@ -781,10 +762,10 @@ class LSTM(object):
         h_t = xm * h_t + (1. - xm) * h_tm1
         return h_t, c
 
-    def apply_pyramid(self, state_below, 
-                            mask_below=None, 
-                            init_state_h=None, 
-                            init_state_c=None, 
+    def apply_pyramid(self, state_below,
+                            mask_below=None,
+                            init_state_h=None,
+                            init_state_c=None,
                             context=None):
         '''
         state_below: shape=[seq_len, batch, n_in]
@@ -824,13 +805,13 @@ class LSTM(object):
         return self.output
 
 
-    def apply_seq_pyramid(self, state_below, 
-                                state_below_p, 
-                                mask_below=None, 
-                                init_state_h=None, 
-                                init_state_c=None, 
-                                init_state_hp=None, 
-                                init_state_cp=None, 
+    def apply_seq_pyramid(self, state_below,
+                                state_below_p,
+                                mask_below=None,
+                                init_state_h=None,
+                                init_state_c=None,
+                                init_state_hp=None,
+                                init_state_cp=None,
                                 context=None):
         '''
         state_below: shape=[seq_len, batch, n_in]

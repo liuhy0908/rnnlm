@@ -1,8 +1,7 @@
 #encoding=utf8
 import theano
 import theano.tensor as T
-from model import NormalRNN , GRU, LSTM, SLSTM, lookup_table, chunk_layer, dropout_layer, maxout_layer, rnn_pyramid_layer, LogisticRegression
-from unit import FeedForward
+from model import NormalRNN , GRU, LSTM, FLSTM, lookup_table,dropout_layer, maxout_layer, rnn_pyramid_layer, LogisticRegression
 from utils import adadelta, step_clipping
 from stream import DStream
 import numpy
@@ -37,17 +36,18 @@ class rnnlm(object):
         table = lookup_table(n_emb_lstm, self.vocab_size, name='Wemb')
         state_below = table.apply(src, emb_lstm_range)
         self.layers.append(table)
-        # 4.17
-        #if self.dropout < 1.0:
-        #    state_below = dropout_layer(state_below, use_noise, self.dropout)
+        if self.dropout < 1.0:
+            state_below = dropout_layer(state_below, use_noise, self.dropout)
 
-        #rnn = LSTM(n_emb_lstm, self.n_hids)
-        rnn = NormalRNN(n_emb_lstm , self.n_hids)
-        hiddens  = rnn.apply(state_below, src_mask)
+        rnn = FLSTM(n_emb_lstm, self.n_hids)
+        hiddens , cells = rnn.apply(state_below, src_mask)
+
+        #rnn = NormalRNN(n_emb_lstm , self.n_hids)
+        #hiddens  = rnn.apply(state_below, src_mask)
         self.layers.append(rnn)
 
-        #if self.dropout < 1.0:
-        #    hiddens = dropout_layer(hiddens, use_noise, self.dropout)
+        if self.dropout < 1.0:
+            hiddens = dropout_layer(hiddens, use_noise, self.dropout)
 
         logistic_layer = LogisticRegression(hiddens, self.n_hids, self.vocab_size)
         self.layers.append(logistic_layer)
@@ -144,6 +144,7 @@ if __name__=='__main__':
         #logger.info('{} epoch has been tackled with {} bad;'.format(epoch, bad_counter))
         ds = DStream(datatype='train', config=cfig)
         for data, mask in ds.get_epoch_iterator():
+            #print data , data.shape
             if cfig['drop_last_batch_if_small'] and (0.0 + len(data)) / cfig['batch_size'] < 0.95:
                 #logger.info('drop batch with: {}/{} ratio'.format(len(data), cfig['batch_size']))
                 pass # FIXME any idea to identify the last batch?
@@ -182,7 +183,7 @@ if __name__=='__main__':
                     cur_time = datetime.now()
                     elasped_minutes = (cur_time - start_time).total_seconds() / 60.
                     batch_elasped_seconds = (cur_time - pre_time).total_seconds()
-                    print ('{:>3} epoch {:>2} bad test/valid(wrong) ppl {:>5.2f} {:>5.2f} i:m:tvbest {:>3} {:>3} {:>5.2f} {:>5.2f} batch {:>4.0f}s, all {:>5.1f}m nan {} inf {}'.\
+                    print ('{:>3} epoch {:>2} bad test/valid ppl {:>5.2f} {:>5.2f} i:m:tvbest {:>3} {:>3} {:>5.2f} {:>5.2f} batch {:>4.0f}s, all {:>5.1f}m nan {} inf {}'.\
                         format(epoch, bad_counter, test_err, valid_err, len(valid_errs)-1, valid_min_idx, valid_min_test, valid_min, batch_elasped_seconds, elasped_minutes, grad_nan_num, grad_inf_num));
                     sys.stdout.flush()
                     if bad_counter > patience:
@@ -192,14 +193,14 @@ if __name__=='__main__':
             print "Early Stop! outter loop"
             break
 
-            valid_min = numpy.min(valid_errs)
-            valid_min_idx = numpy.argmin(valid_errs)
-            valid_min_test = test_errs[valid_min_idx]
-            test_min = numpy.min(test_errs)
-            test_min_idx = numpy.argmin(test_errs)
-            cur_cfig = str(valid_min_idx)  + ':' + str(valid_min)
-            cur_cfig += ',' + str(valid_min_test) + ','
-            cur_cfig += str(test_min_idx)  + ':' + str(test_min)
-            print '#== epoch:valid_min,valid_min_test,epoch:test_min: ' + cur_cfig
+    valid_min = numpy.min(valid_errs)
+    valid_min_idx = numpy.argmin(valid_errs)
+    valid_min_test = test_errs[valid_min_idx]
+    test_min = numpy.min(test_errs)
+    test_min_idx = numpy.argmin(test_errs)
+    cur_cfig = str(valid_min_idx)  + ':' + str(valid_min)
+    cur_cfig += ',' + str(valid_min_test) + ','
+    cur_cfig += str(test_min_idx)  + ':' + str(test_min)
+    print '#== epoch:valid_min,valid_min_test,epoch:test_min: ' + cur_cfig
 
 

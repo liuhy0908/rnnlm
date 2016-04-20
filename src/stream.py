@@ -1,17 +1,12 @@
 import logging
 logging.basicConfig(level=logging.INFO)
-
 from fuel.datasets import TextFile
 from fuel.streams import DataStream
 from fuel.schemes import ConstantScheme
 from fuel.transformers import Batch, Padding, SortMapping, Unpack, Mapping
-
 import cPickle as pickle
-
 import random
-
 logger = logging.getLogger(__name__)
-
 
 def _length(sentence):
         return len(sentence[0])
@@ -26,15 +21,12 @@ def DStream(datatype, config):
         filename = config['test_file']
     else:
         logger.error('wrong datatype, train, valid, or test')
-
-
     data = TextFile(files=[filename],
                     dictionary=pickle.load(open(config['train_dic'],'rb')),
                     unk_token=config['unk_token'],
                     level='word',
                     bos_token=config['bos_token'],
                     eos_token=config['eos_token'])
-
     data_stream = DataStream.default_stream(data)
     data_stream.sources = ('sentence',)
 
@@ -42,7 +34,7 @@ def DStream(datatype, config):
     # organize data in batches and pad shorter sequences with zeros
     batch_size = config['batch_size']
     if datatype == 'train' and config['is_shuffle']: # FIXME: memory/IO issue, find better way to shuffle text file
-        num_lines = sum(1 for line in open(filename)) 
+        num_lines = sum(1 for line in open(filename))
         data_stream = Batch(data_stream, iteration_scheme=ConstantScheme(num_lines))
         data_stream = Mapping(data_stream, SortMapping(lambda x: random.random()))
         data_stream = Unpack(data_stream)
