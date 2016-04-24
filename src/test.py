@@ -1,10 +1,8 @@
 #encoding=utf8
 import cPickle as pickle
 import numpy
-import fuel.datasets import TextFile
-import fuel.schemes import ConstantScheme
-import fuel.streams import DataStream
-import fuel.transformers import Batch , Padding
+import theano
+import theano.tensor as T
 def test():
     fin = open("../data/train_dic.pkl" , "r")
     dic = pickle.load(fin)
@@ -25,8 +23,22 @@ def test2():
     print b
     print b[:,None]
     print m[b[:,None],[0 ,2]]
+def step(in1 , in2 , in3):
+    in3 = 10
+    return in1
+
 def test3():
-    return 1
+    k = T.lscalar("k")
+    A = T.lvector("A")
+    b = T.lscalar("b")
+    result , updates = theano.scan(fn = step,
+                                    sequences = A ,
+                                    outputs_info = k,
+                                    non_sequences = b,
+                                    n_steps = 5)
+    final_result = result
+    power = theano.function(inputs = [A , k , b] , outputs = [final_result , b])
+    print power(range(10) , 0 , 0)
 
 
 if __name__ == "__main__":

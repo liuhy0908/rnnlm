@@ -40,7 +40,7 @@ class rnnlm(object):
             state_below = dropout_layer(state_below, use_noise, self.dropout)
 
         rnn = FLSTM(n_emb_lstm, self.n_hids)
-        hiddens , cells = rnn.apply(state_below, src_mask)
+        hiddens , cells , cells2 = rnn.apply(state_below, src_mask)
 
         #rnn = NormalRNN(n_emb_lstm , self.n_hids)
         #hiddens  = rnn.apply(state_below, src_mask)

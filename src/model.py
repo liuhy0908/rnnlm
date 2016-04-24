@@ -455,16 +455,20 @@ class FLSTM(object):
         self.b_at = param_init().constant((n_hids,))
         self.b_comb = param_init().constant((n_hids,))
 
-        self.params = self.params + [self.W_at , self.b_at,
-                                     self.W_comb , self.W_comb2 , self.b_comb]
+        #self.params.extend(self.attention.params)
+        #self.params = self.params + [self.W_at , self.b_at,
+        #                             self.W_comb , self.W_comb2 , self.b_comb]
+        self.params = self.params + [self.W_comb , self.W_comb2 , self.b_comb]
 
-    def _step_forward(self, x_t, x_m, t , h_tm1, c_tm1 , his):
+    def _step_forward(self, x_t, x_m, t , h_tm1, c_tm1 , h_tm2):
         '''
         x_t: input at time t
         x_m: mask of x_t
         h_tm1: previous state
         c_tm1: previous memory cell
         '''
+        h_tm1 = T.nnet.sigmoid(T.dot(h_tm1 , self.W_comb) +
+                               T.dot(h_tm2 , self.W_comb2) + self.b_comb)
         i_t = T.nnet.sigmoid(T.dot(x_t, self.W_xi) +
                              T.dot(h_tm1, self.W_hi) + self.b_i)
 
@@ -483,13 +487,13 @@ class FLSTM(object):
         h_t = o_t * T.tanh(c_t)
         h_t = x_m[:, None] * h_t + (1. - x_m[:, None]) * h_tm1
 
-        pre_ctx = T.dot(his[0:t-1] , self.W_at) + self.b_at
-        ctx_psum , alphaT = self.attention.apply(h_t , pre_ctx , his[0:t-1])
-        h_2 = T.nnet.sigmoid(T.dot(ctx_psum , self.W_comb) +
-                             T.dot(h_t , self.W_comb2) + self.b_comb)
-        h_2 = x_m[:,None] * h_2 + (1. - x_m[: , None]) * h_tm1
-        T.set_subtensor(his[t,:] , h_2)
-        return h_2, c_t
+        #pre_ctx = T.dot(his[0:t-1] , self.W_at) + self.b_at
+        #ctx_psum , alphaT = self.attention.apply(h_t , pre_ctx , his[0:t-1])
+        #h_2 = T.nnet.sigmoid(T.dot(ctx_psum , self.W_comb) +
+        #                     T.dot(h_t , self.W_comb2) + self.b_comb)
+        #h_2 = x_m[:,None] * h_2 + (1. - x_m[: , None]) * h_tm1
+        #T.set_subtensor(his[t,:] , h_2)
+        return h_t, c_t , h_tm1
 
     def apply(self, state_below, mask_below, init_state=None, context=None):
         if state_below.ndim == 3:
@@ -500,12 +504,13 @@ class FLSTM(object):
         if init_state is None:
             init_state = T.alloc(numpy.float32(0.), batch_size, self.n_hids)
             init_state1 = T.alloc(numpy.float32(0.), batch_size, self.n_hids)
-        init_state2 = T.alloc(numpy.float32(0.) , n_steps , batch_size , self.n_hids)
+            init_state2 = T.alloc(numpy.float32(0.), batch_size, self.n_hids)
+        init_his = T.alloc(numpy.float32(0.) , n_steps , batch_size , self.n_hids)
         step_idx = T.arange(n_steps)
         rval, updates = theano.scan(self._step_forward,
                                     sequences=[state_below, mask_below ,step_idx],
-                                    outputs_info=[init_state, init_state1],
-                                    non_sequences=[init_state2],
+                                    outputs_info=[init_state, init_state1 , init_state2],
+                                    non_sequences=[],
                                     n_steps=n_steps
                                     )
         self.output = rval
