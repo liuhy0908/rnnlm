@@ -452,15 +452,17 @@ class FLSTM(object):
         self.W_at = param_init().normal(size_hh)
         self.W_comb = param_init().normal(size_hh)
         self.W_comb2 = param_init().normal(size_hh)
+        self.W_comb3 = param_init().normal(size_hh)
         self.b_at = param_init().constant((n_hids,))
         self.b_comb = param_init().constant((n_hids,))
 
         #self.params.extend(self.attention.params)
         #self.params = self.params + [self.W_at , self.b_at,
         #                             self.W_comb , self.W_comb2 , self.b_comb]
-        self.params = self.params + [self.W_comb , self.W_comb2 , self.b_comb]
+        #self.params = self.params + [self.W_comb , self.W_comb2 , self.b_comb]
+        self.params = self.params + [self.W_comb , self.W_comb2 , self.W_comb3 , self.b_comb]
 
-    def _step_forward(self, x_t, x_m, t , h_tm1, c_tm1 , h_tm2):
+    def _step_forward(self, x_t, x_m, t , h_tm1, c_tm1 , h_tm2 , h_tm3):
         '''
         x_t: input at time t
         x_m: mask of x_t
@@ -468,7 +470,8 @@ class FLSTM(object):
         c_tm1: previous memory cell
         '''
         h_tm1 = T.nnet.sigmoid(T.dot(h_tm1 , self.W_comb) +
-                               T.dot(h_tm2 , self.W_comb2) + self.b_comb)
+                               T.dot(h_tm2 , self.W_comb2) +
+                               T.dot(h_tm3 , self.W_comb3) + self.b_comb)
         i_t = T.nnet.sigmoid(T.dot(x_t, self.W_xi) +
                              T.dot(h_tm1, self.W_hi) + self.b_i)
 
@@ -493,7 +496,7 @@ class FLSTM(object):
         #                     T.dot(h_t , self.W_comb2) + self.b_comb)
         #h_2 = x_m[:,None] * h_2 + (1. - x_m[: , None]) * h_tm1
         #T.set_subtensor(his[t,:] , h_2)
-        return h_t, c_t , h_tm1
+        return h_t, c_t , h_tm1 , h_tm2
 
     def apply(self, state_below, mask_below, init_state=None, context=None):
         if state_below.ndim == 3:
@@ -505,11 +508,12 @@ class FLSTM(object):
             init_state = T.alloc(numpy.float32(0.), batch_size, self.n_hids)
             init_state1 = T.alloc(numpy.float32(0.), batch_size, self.n_hids)
             init_state2 = T.alloc(numpy.float32(0.), batch_size, self.n_hids)
+            init_state3 = T.alloc(numpy.float32(0.), batch_size, self.n_hids)
         init_his = T.alloc(numpy.float32(0.) , n_steps , batch_size , self.n_hids)
         step_idx = T.arange(n_steps)
         rval, updates = theano.scan(self._step_forward,
                                     sequences=[state_below, mask_below ,step_idx],
-                                    outputs_info=[init_state, init_state1 , init_state2],
+                                    outputs_info=[init_state, init_state1 , init_state2 , init_state3],
                                     non_sequences=[],
                                     n_steps=n_steps
                                     )
