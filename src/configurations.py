@@ -26,8 +26,8 @@ def get_config_penn():
     ####### loop behave ##############
     config['is_shuffle'] = True
     config['drop_last_batch_if_small'] = True
-    config['check_freq'] = 5100
-    config['check_low_freq'] = 50000
+    config['check_freq'] = 5000
+    config['check_low_freq'] = 80000
     config['check_low_freq_count'] = 1500000
 
     ####### path ##############

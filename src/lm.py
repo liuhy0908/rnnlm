@@ -39,23 +39,27 @@ class rnnlm(object):
         if self.dropout < 1.0:
             state_below = dropout_layer(state_below, use_noise, self.dropout)
 
-        rnn = FLSTM(n_emb_lstm, self.n_hids)
-        hiddens , cells , cells2 , cells3 = rnn.apply(state_below, src_mask)
+        rnn = LSTM(n_emb_lstm, self.n_hids)
+        hiddens , cells  = rnn.apply(state_below, src_mask)
         self.layers.append(rnn)
-
-        if self.dropout < 1.0:
-            hiddens = dropout_layer(hiddens, use_noise, self.dropout)
-
-        rnn2 = FLSTM(n_emb_lstm, self.n_hids)
-        hiddens , cells , cells2 , cells3 = rnn2.apply(hiddens , src_mask)
+        #if self.dropout < 1.0:
+        #    hiddens = dropout_layer(hiddens, use_noise, self.dropout)
+        rnn2 = FLSTM(self.n_hids, self.n_hids)
+        hiddens , cells = rnn2.apply(hiddens , hiddens , src_mask)
         self.layers.append(rnn2)
 
         #rnn = NormalRNN(n_emb_lstm , self.n_hids)
         #hiddens  = rnn.apply(state_below, src_mask)
         #self.layers.append(rnn)
 
-        if self.dropout < 1.0:
-            hiddens = dropout_layer(hiddens, use_noise, self.dropout)
+        #if self.dropout < 1.0:
+        #    hiddens = dropout_layer(hiddens, use_noise, self.dropout)
+        if True:
+            maxout = maxout_layer()
+            states = T.concatenate([state_below, hiddens], axis=2)
+            maxout_n_fold = 2
+            hiddens = maxout.apply(states, n_emb_lstm + self.n_hids, self.n_hids, src_mask, maxout_n_fold)
+            self.layers.append(maxout)
 
         logistic_layer = LogisticRegression(hiddens, self.n_hids, self.vocab_size)
         self.layers.append(logistic_layer)

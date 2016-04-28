@@ -449,6 +449,94 @@ class FLSTM(object):
                        self.b_i, self.b_f, self.b_o, self.b_c]
 
         self.attention = ATT(self.n_hids)
+        self.params.extend(self.attention.params)
+        self.W_at = param_init().normal(size_hh)
+        self.W_comb = param_init().normal(size_hh)
+        self.W_comb2 = param_init().normal(size_hh)
+        #self.W_comb3 = param_init().normal(size_hh)
+        self.b_at = param_init().constant((n_hids,))
+        self.b_comb = param_init().constant((n_hids,))
+        self.params = self.params + [self.W_at , self.b_at,
+                                     self.W_comb , self.W_comb2 , self.b_comb]
+        #self.params = self.params + [self.W_comb , self.W_comb2 , self.b_comb]
+        #self.params = self.params + [self.W_comb , self.W_comb2 , self.W_comb3 , self.b_comb]
+    def _step_forward(self, x_t, x_m, t , h_tm1, c_tm1 , his):
+        '''
+        x_t: input at time t
+        x_m: mask of x_t
+        h_tm1: previous state
+        c_tm1: previous memory cell
+        '''
+        pre_ctx = T.dot(his , self.W_at) + self.b_at
+        ctx_psum , alphaT = self.attention.apply(h_tm1 , pre_ctx , his)
+        h_tm1 = T.nnet.sigmoid(T.dot(ctx_psum , self.W_comb) +
+                             T.dot(h_tm1 , self.W_comb2) + self.b_comb)
+        i_t = T.nnet.sigmoid(T.dot(x_t, self.W_xi) +
+                             T.dot(h_tm1, self.W_hi) + self.b_i)
+        f_t = T.nnet.sigmoid(T.dot(x_t, self.W_xf) +
+                             T.dot(h_tm1, self.W_hf) + self.b_f)
+        o_t = T.nnet.sigmoid(T.dot(x_t, self.W_xo) +
+                             T.dot(h_tm1, self.W_ho) + self.b_o)
+        c_t = T.tanh(T.dot(x_t, self.W_xc) +
+                             T.dot(h_tm1, self.W_hc) + self.b_c)
+        c_t = f_t * c_tm1 + i_t * c_t
+        c_t = x_m[:, None] * c_t + (1. - x_m[:, None]) * c_tm1
+        h_t = o_t * T.tanh(c_t)
+        h_t = x_m[:, None] * h_t + (1. - x_m[:, None]) * h_tm1
+        return h_t, c_t
+    def apply(self, state_below, his , mask_below, init_state=None, context=None):
+        if state_below.ndim == 3:
+            batch_size = state_below.shape[1]
+            n_steps = state_below.shape[0]
+        else:
+            raise NotImplementedError
+        if init_state is None:
+            init_state = T.alloc(numpy.float32(0.), batch_size, self.n_hids)
+            init_state1 = T.alloc(numpy.float32(0.), batch_size, self.n_hids)
+        step_idx = T.arange(n_steps)
+        rval, updates = theano.scan(self._step_forward,
+                                    sequences=[state_below, mask_below ,step_idx],
+                                    outputs_info=[init_state, init_state1],
+                                    non_sequences=[his],
+                                    n_steps=n_steps
+                                    )
+        self.output = rval
+        return self.output
+
+class FLSTM_bp(object):
+    def __init__(self, n_in, n_hids, with_contex=False, **kwargs):
+        self.n_in = n_in
+        self.n_hids = n_hids
+        self.with_contex = with_contex
+        if self.with_contex:
+            self.c_hids = kwargs.pop('c_hids', n_hids)
+        self._init_params()
+
+    def _init_params(self):
+        n_in = self.n_in
+        n_hids = self.n_hids
+        size_xh = (n_in, n_hids)
+        size_hh = (n_hids, n_hids)
+        self.W_xi = param_init().normal(size_xh)
+        self.W_xf = param_init().normal(size_xh)
+        self.W_xo = param_init().normal(size_xh)
+        self.W_xc = param_init().normal(size_xh)
+
+        self.W_hi = param_init().orth(size_hh)
+        self.W_hf = param_init().orth(size_hh)
+        self.W_ho = param_init().orth(size_hh)
+        self.W_hc = param_init().orth(size_hh)
+
+        self.b_i = param_init().constant((n_hids,))
+        self.b_f = param_init().constant((n_hids,), scale=1.0) #  Jozefowicz et al. 2015
+        self.b_o = param_init().constant((n_hids,))
+        self.b_c = param_init().constant((n_hids,))
+
+        self.params = [self.W_xi, self.W_xf, self.W_xo, self.W_xc,
+                       self.W_hi, self.W_hf, self.W_ho, self.W_hc,
+                       self.b_i, self.b_f, self.b_o, self.b_c]
+
+        self.attention = ATT(self.n_hids)
         self.W_at = param_init().normal(size_hh)
         self.W_comb = param_init().normal(size_hh)
         self.W_comb2 = param_init().normal(size_hh)
@@ -462,7 +550,8 @@ class FLSTM(object):
         #self.params = self.params + [self.W_comb , self.W_comb2 , self.b_comb]
         self.params = self.params + [self.W_comb , self.W_comb2 , self.W_comb3 , self.b_comb]
 
-    def _step_forward(self, x_t, x_m, t , h_tm1, c_tm1 , h_tm2 , h_tm3):
+    #def _step_forward(self, x_t, x_m, t , h_tm1, c_tm1 , h_tm2 , h_tm3):
+    def _step_forward(self, x_t, x_m, t , h_tm1, c_tm1):
         '''
         x_t: input at time t
         x_m: mask of x_t

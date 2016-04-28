@@ -23,22 +23,20 @@ def test2():
     print b
     print b[:,None]
     print m[b[:,None],[0 ,2]]
-def step(in1 , in2 , in3):
-    in3 = 10
-    return in1
+def step(in1 , in2):
+    return T.arange(in1)
+    #return in1
 
 def test3():
-    k = T.lscalar("k")
-    A = T.lvector("A")
-    b = T.lscalar("b")
+    A = T.vector("A")
+    k = T.vector("k")
+    #k = T.scalar("k")
     result , updates = theano.scan(fn = step,
                                     sequences = A ,
                                     outputs_info = k,
-                                    non_sequences = b,
                                     n_steps = 5)
-    final_result = result
-    power = theano.function(inputs = [A , k , b] , outputs = [final_result , b])
-    print power(range(10) , 0 , 0)
+    power = theano.function(inputs = [A , k] , outputs = [result])
+    print power([3,3,3,3,3] , range(3))
 
 
 if __name__ == "__main__":
