@@ -56,5 +56,13 @@ def test4():
     print (a * c[: , : , None]).sum(0)
 
 
+def test5():
+    a = T.vector("a")
+    b = T.scalar("b")
+    c = T.matrix("c")
+    out = T.concatenate([a[None,:] , c] , axis = 0)
+    fn = theano.function(inputs=[a , c] , outputs=[out])
+    print fn([1 , 2 , 3] , [[4 ,  5 , 6] , [7 , 8 , 9]])
+
 if __name__ == "__main__":
-    test4()
+    test5()

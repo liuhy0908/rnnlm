@@ -465,7 +465,6 @@ class FLSTM(object):
                                      self.W_comb , self.W_comb2 , self.b_comb]
         #self.params = self.params + [self.W_comb , self.W_comb2 , self.b_comb]
         #self.params = self.params + [self.W_comb , self.W_comb2 , self.W_comb3 , self.b_comb]
-    #def _step_forward(self, x_t, x_m, t , h_tm1, c_tm1 , his , init2):
     def _step_forward(self, x_t, x_m, t , h_tm1, c_tm1 , his):
         '''
         x_t: input at time t
@@ -475,9 +474,9 @@ class FLSTM(object):
         his : seq * batch * hids
         '''
         #tmp = T.switch(T.gt(t , 0) , his[:t,:,:] , init2)
-        tmp = T.switch(T.gt(t , 0) , t , 1)
-        pre_ctx = T.dot(his[:tmp,:,:] , self.W_at) + self.b_at
-        #pre_ctx = T.dot(tmp , self.W_at) + self.b_at
+        #tmp = T.switch(T.gt(t , 0) , t , 1)
+        #pre_ctx = T.dot(his[:tmp,:,:] , self.W_at) + self.b_at
+        pre_ctx = T.dot(his[:t,:,:] , self.W_at) + self.b_at
         #pre_ctx : seq * batch * hids
         pstate = T.dot(h_tm1 , self.W_at2)
         #pstate : batch * hids
@@ -491,8 +490,8 @@ class FLSTM(object):
         alpha = alpha / alpha.sum(0 , keepdims=True)
         #his : seq * batch * hids
         #alpha : seq * batch
-        ctx_psum = (his[:tmp,:,:] * alpha[:,:,None]).sum(0)
-        #ctx_psum = (tmp * alpha[:,:,None]).sum(0)
+        #ctx_psum = (his[:tmp,:,:] * alpha[:,:,None]).sum(0)
+        ctx_psum = (his[:t,:,:] * alpha[:,:,None]).sum(0)
         #ctx_psum : batch * hids
 
         #pre_ctx = T.dot(his[t-1,:,:] , self.W_at) + self.b_at
@@ -526,8 +525,9 @@ class FLSTM(object):
         if init_state is None:
             init_state = T.alloc(numpy.float32(0.), batch_size, self.n_hids)
             init_state1 = T.alloc(numpy.float32(0.), batch_size, self.n_hids)
-            init_state2 = T.alloc(numpy.float32(0.), 2 , batch_size, self.n_hids)
-        step_idx = T.arange(n_steps)
+        pre_t = T.alloc(numpy.float32(0.), batch_size, self.n_hids)
+        his = T.concatenate([pre_t[None,:,:] , his] , axis = 0)
+        step_idx = T.arange(1 , n_steps + 1)
         rval, updates = theano.scan(self._step_forward,
                                     sequences=[state_below, mask_below ,step_idx],
                                     outputs_info=[init_state, init_state1],
