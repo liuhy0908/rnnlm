@@ -52,14 +52,14 @@ class rnnlm(object):
         #hiddens  = rnn.apply(state_below, src_mask)
         #self.layers.append(rnn)
 
-        #if self.dropout < 1.0:
-        #    hiddens = dropout_layer(hiddens, use_noise, self.dropout)
         if True:
             maxout = maxout_layer()
             states = T.concatenate([state_below, hiddens], axis=2)
             maxout_n_fold = 2
             hiddens = maxout.apply(states, n_emb_lstm + self.n_hids, self.n_hids, src_mask, maxout_n_fold)
             self.layers.append(maxout)
+        if self.dropout < 1.0:
+            hiddens = dropout_layer(hiddens, use_noise, self.dropout)
 
         logistic_layer = LogisticRegression(hiddens, self.n_hids, self.vocab_size)
         self.layers.append(logistic_layer)

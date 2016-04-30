@@ -1,6 +1,6 @@
 #encoding=utf8
 import cPickle as pickle
-import numpy
+import numpy as np
 import theano
 import theano.tensor as T
 def test():
@@ -38,6 +38,23 @@ def test3():
     power = theano.function(inputs = [A , k] , outputs = [result])
     print power([3,3,3,3,3] , range(3))
 
+def test4():
+    a = np.array([[[0 , 1 , 2 , 3] , [4 , 5 , 6 , 7] , [7 , 8 , 9 , 0]],
+                  [[1 , 0 , 1 , 0] , [2 , 0 , 2 , 0] , [3 , 0 , 3 , 0]]])
+    b = np.array([[[1 , 0 , 1 , 0] , [1 , 0 , 1 , 0] , [1 , 0 , 1 , 0]],
+                  [[1 , 1 , 1 , 1] , [2 , 2 , 2 , 2] , [3 , 3 , 3 , 3]]])
+    c = np.array([[9 , 0 , 9] , [8 , 0 , 8]])
+    print a.shape
+    print a[:0 , : , :]
+    #print a.sum(0)
+    #print a.sum(1)
+    #print a * b
+    print c[: , : , None]
+    print c[None , : , :]
+    print c.shape
+    print a * c[: , : , None]
+    print (a * c[: , : , None]).sum(0)
+
 
 if __name__ == "__main__":
-    test3()
+    test4()
