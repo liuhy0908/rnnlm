@@ -107,12 +107,10 @@ class morphRNN(object):
         morph rnn
         h_t = h_tm1 * W_hh + x_t * W_xh + m_tm1 * W_mh + b
     """
-    def __init__(self , n_in , n_hids , with_contex=False , **kwargs):
+    def __init__(self , n_in , n_hids , **kwargs):
         self.n_in = n_in
         self.n_hids = n_hids
         self.with_contex = with_contex
-        if self.with_contex:
-            self.c_hids = kwargs.pop('c_hids' , n_hids)
         self._init_params()
 
     def _init_params(self):

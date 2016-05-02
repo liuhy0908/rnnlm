@@ -4,7 +4,7 @@ import numpy as np
 import theano
 import theano.tensor as T
 def test():
-    fin = open("../data/train_dic.pkl" , "r")
+    fin = open("../data/en_data/train_dic.pkl" , "r")
     dic = pickle.load(fin)
     print type(dic)
     i = 0
@@ -65,4 +65,4 @@ def test5():
     print fn([1 , 2 , 3] , [[4 ,  5 , 6] , [7 , 8 , 9]])
 
 if __name__ == "__main__":
-    test5()
+    test()
