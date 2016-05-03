@@ -19,19 +19,25 @@ class PrepareData:
         self.unk_id = unk_id
         self.unk_token = unk_token
         self.seq_len = seq_len
+        if kwargs['train_morph_file'] != "":
+            self.train_char_file = kwargs['train_morph_file']
+            dic = self._creat_dic(self.train_char_file , kwargs['seq_morph_len'])
+            f = open(kwargs['train_morph_dic'], 'wb')
+            pickle.dump(dic, f)
+            f.close()
 
-        dic = self._creat_dic()
+        dic = self._creat_dic(self.filename , self.seq_len)
         f = open(train_dic, 'wb')
         pickle.dump(dic, f)
+        f.close()
         logger.info('dump train dict {} has been dumped'.format(train_dic))
 
-    def _creat_dic(self):
-        if os.path.isfile(self.filename):
-            train = open(self.filename)
+    def _creat_dic(self , filename , seq_len):
+        if os.path.isfile(filename):
+            train = open(filename)
         else:
-            logger.warning("file name {} not exist".format(self.filename))
+            logger.warning("file name {} not exist".format(filename))
 
-        seq_len = self.seq_len
         worddict={}
         worddict[self.unk_token] = self.unk_id
 
@@ -45,6 +51,8 @@ class PrepareData:
         index = self.unk_id + 1
         if self.unk_token in counter:
             del counter[self.unk_token]
+        print len(counter)
+        # most_common : return top n
         for word, c in counter.most_common(self.vocabsize-3): #FIXME 2 or 3
             worddict[word] = index
             index += 1
@@ -59,5 +67,5 @@ class PrepareData:
         return worddict
 
 if __name__ =="__main__":
-    configuration = getattr(configurations, 'get_config_penn')()
+    configuration = getattr(configurations, 'get_config_morph')()
     prepare = PrepareData(**configuration)

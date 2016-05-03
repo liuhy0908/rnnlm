@@ -50,14 +50,15 @@ def get_config_penn():
 def get_config_morph():
     config = {}
     ####### network param #############
-    config['seq_len'] = 80
+    config['seq_len'] = 40
+    config['seq_morph_len'] = 50
     config['n_hids'] = 200
     config['n_emb_morph'] = 200
     config['n_emb_lstm'] = 200
     config['batch_size'] = 100
     config['batch_size_valid'] = 100
-    config['vocab_size'] = 10001
-    config['morph_size'] = 10001
+    config['vocab_size'] = 100001
+    config['morph_size'] = 40001
 
     ####### devil in detail ##############
     config['use_noise'] = 1                     # use noise = 1 mean use dropout layer ?
@@ -77,10 +78,16 @@ def get_config_morph():
     config['check_low_freq_count'] = 1500000
 
     ####### path ##############
-    datadir = '../data/uy_data/'
-    config['train_file'] = datadir + 'train'
-    config['valid_file'] = datadir + 'valid'
-    config['test_file'] = datadir + 'test'
+    datadir = '../data/uy_data2/'
+    config['train_file'] = datadir + 'train_word'
+    config['train_morph_file'] = datadir + 'train_morph'
+    config['train_rel_file'] = datadir + 'train_rel'
+    config['valid_file'] = datadir + 'valid_word'
+    config['valid_morph_file'] = datadir + 'valid_morph'
+    config['valid_rel_file'] = datadir + 'valid_rel'
+    config['test_file'] = datadir + 'test_word'
+    config['test_morph_file'] = datadir + 'test_morph'
+    config['test_rel_file'] = datadir + 'test_rel'
 
     ####### dict ##############
     config['train_dic'] = datadir + 'train_dic.pkl'

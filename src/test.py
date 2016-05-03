@@ -3,10 +3,11 @@ import cPickle as pickle
 import numpy as np
 import theano
 import theano.tensor as T
+from model import MorphStruct
 def test():
-    fin = open("../data/en_data/train_dic.pkl" , "r")
+    fin = open("../data/uy_data2/train_dic.pkl" , "r")
+    #fin = open("../data/uy_data2/train_morph_dic.pkl" , "r")
     dic = pickle.load(fin)
-    print type(dic)
     i = 0
     for key in dic:
         print key , dic[key]
@@ -64,5 +65,81 @@ def test5():
     fn = theano.function(inputs=[a , c] , outputs=[out])
     print fn([1 , 2 , 3] , [[4 ,  5 , 6] , [7 , 8 , 9]])
 
+def test6():
+    A = T.tensor3("A")
+    k = T.tensor3("k")
+    k = A[:,1:3,:].sum(1)
+    #k = T.scalar("k")
+    fn = theano.function(inputs = [A] , outputs = [k])
+    i = [[[1,1,1],[2,2,2],[3,3,3],[4,4,4]],[[3,3,3],[4,4,4],[5,5,5],[6,6,6]]]
+    print i
+    print fn(i)
+
+def test7():
+    morph = T.tensor3("morph")
+    morph_mask = T.tensor3("mask")
+    rel = T.matrix("rel")
+    morphStruct = MorphStruct()
+    morph_out = morphStruct.apply(morph , morph_mask , rel)
+    fn = theano.function(inputs = [morph , morph_mask , rel] ,outputs = [morph_out] , on_unused_input='ignore')
+    #rel : batch * sentence
+    #state_below_morph : batch * sentence * n_emb_morph
+    i = [
+            [
+                [1,1,1,1,1] , [2,2,2,2,2] , [3,3,3,3,3] , [4,4,4,4,4] ,
+                [1,1,1,1,1] , [2,2,2,2,2] , [3,3,3,3,3] , [4,4,4,4,4] ,
+                [1,1,1,1,1] , [2,2,2,2,2] , [3,3,3,3,3] , [4,4,4,4,4]
+            ],
+            [
+                [1,1,1,1,1] , [2,2,2,2,2] , [3,3,3,3,3] , [4,4,4,4,4] ,
+                [1,1,1,1,1] , [2,2,2,2,2] , [3,3,3,3,3] , [4,4,4,4,4] ,
+                [1,1,1,1,1] , [2,2,2,2,2] , [3,3,3,3,3] , [4,4,4,4,4]
+            ],
+            [
+                [1,1,1,1,1] , [2,2,2,2,2] , [3,3,3,3,3] , [4,4,4,4,4] ,
+                [1,1,1,1,1] , [2,2,2,2,2] , [3,3,3,3,3] , [4,4,4,4,4] ,
+                [1,1,1,1,1] , [2,2,2,2,2] , [3,3,3,3,3] , [4,4,4,4,4]
+            ]
+        ]
+    m = i
+    r = [[1,1,2,1,3,1,3,0,0,0] , [1,2,1,2,1,1,1,1,1,1],[3,1,1,5,1,1,0,0,0,0]]
+    res = fn(i , m , r)
+    print res
+
+
+
+
+
+
+
+
+
+
 if __name__ == "__main__":
-    test()
+    test7()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
