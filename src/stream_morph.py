@@ -25,6 +25,17 @@ def padding(mat):
     m = np.array(mat2)
     return m
 
+def padding2(tensor3):
+    maxs = []
+    for mat in tensor3:
+        tmp = max([len(a) for a in mat])
+        maxs.append(tmp)
+    max_length = max(maxs)
+    for mat in tensor3:
+        for vec in mat:
+            vec.extend([0] * (max_length - len(vec)))
+    return tensor3
+
 def DStream(datatype, config):
     if datatype=='train':
         filename = config['train_file']
@@ -69,27 +80,49 @@ def DStream(datatype, config):
             else:
                 rels_stream.append(padding(lines[i : len(lines)]))
                 i = i + batch_size
+    data_stream = Batch(data_stream, iteration_scheme=ConstantScheme(batch_size))
+    data_stream = Padding(data_stream)
+
     data_morph_stream = Batch(data_morph_stream, iteration_scheme=ConstantScheme(batch_size))
     data_morph_stream = Padding(data_morph_stream)
     data_morph_tensor3 = []
-    for data_morph_tuple ,rel in zip(data_morph_stream.get_epoch_iterator() , rels_stream):
+    mask_morph_tensor3 = []
+    #data_morph_stream : batch_num * batch * sentence
+    #rels_stream : batch_num * batch * sentence
+    #dta_morph_tensor3 : batch_num * batch * sentence * morph
+    for data_morph_tuple , rel in zip(data_morph_stream.get_epoch_iterator() , rels_stream):
         data_morph , mask_morph = data_morph_tuple
-        for m , r in zip(data_morph , rel):
-            print m.shape , r.shape
-        exit(0)
-
-
-
-
-
-    data_stream = Batch(data_stream, iteration_scheme=ConstantScheme(batch_size))
-    data_stream = Padding(data_stream)
-    return data_stream , data_morph_stream , np.array(rels_stream)
+        #data_morph : batch * sentence
+        #rel : batch * sentence
+        tmp = []
+        tmp_mask = []
+        for m , mask , r in zip(data_morph , mask_morph , rel):
+            #m : sentence
+            #r : sentence
+            start = 0
+            tmp2 = []
+            tmp_mask2 = []
+            for idx in r:
+                tmp2.append(m[start:start+idx].tolist())
+                tmp_mask2.append(mask[start:start+idx].tolist())
+                #print m[start:start+idx]
+                start = start + idx
+            #print len(tmp)
+            #print padding2(tmp2)
+            tmp.append(tmp2)
+            tmp_mask.append(tmp_mask2)
+            #print len(tmp) , tmp
+            #print m , r
+            #print m.shape , r.shape
+        #print padding2(tmp)
+        data_morph_tensor3.append(np.array(padding2(tmp)))
+        mask_morph_tensor3.append(np.array(padding2(tmp_mask) , dtype='float32'))
+    return data_stream , data_morph_tensor3 , mask_morph_tensor3
 
 if __name__ == "__main__":
     import configurations
     configuration = getattr(configurations, 'get_config_morph')()
-    ds , ds_morph , rels = DStream(datatype='train', config=configuration)
+    ds , ds_morph , ds_morph_mask = DStream(datatype='train', config=configuration)
     """
     fin = open("../data/uy_data2/train_dic.pkl" , "r")
     #fin = open("../data/uy_data2/train_morph_dic.pkl" , "r")
@@ -101,12 +134,13 @@ if __name__ == "__main__":
     """
     i = 0
     start = 0
-    for data_morph_tuple , data_tuple , rel in zip(ds_morph.get_epoch_iterator() , ds.get_epoch_iterator() , rels):
+    for data_tuple , data_morph , mask_morph in zip(ds.get_epoch_iterator() , ds_morph , ds_morph_mask):
         data , mask = data_tuple
-        data_morph , mask_morph = data_morph_tuple
-        print data.shape , data_morph.shape , rel.shape
-        print type(data) , type(data_morph) , type(rel)
-        print data , data_morph , rel
+        #print type(data) , type(data_morph)
+        print data.shape , data_morph.shape , mask_morph.shape
+        print data , mask , data_morph , mask_morph
+        print data.dtype , mask.dtype , data_morph.dtype , mask_morph.dtype
+        #print data[0] , data_morph[0]
         #print data[0].shape , data_morph[0].shape
         #print data, mask
         #print data[0], mask[0]

@@ -8,6 +8,10 @@ def test():
     fin = open("../data/uy_data2/train_dic.pkl" , "r")
     #fin = open("../data/uy_data2/train_morph_dic.pkl" , "r")
     dic = pickle.load(fin)
+    dic2 = {}
+    for key in dic:
+        dic2[dic[key]] = key
+    print dic2[0]
     i = 0
     for key in dic:
         print key , dic[key]
@@ -103,8 +107,11 @@ def test7():
         ]
     m = i
     r = [[1,1,2,1,3,1,3,0,0,0] , [1,2,1,2,1,1,1,1,1,1],[3,1,1,5,1,1,0,0,0,0]]
-    res = fn(i , m , r)
-    print res
+    #res = fn(i , m , r)
+    mat = np.array(i)
+    print mat.shape
+    print mat.sum(2)
+    print mat.sum(1).shape
 
 
 

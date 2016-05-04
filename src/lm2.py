@@ -24,10 +24,10 @@ class rnnlm_morph(object):
         self.params = []
         self.layers = []
 
-    def apply(self, sentence, sentence_mask, sentence_morph, sentence_morph_mask, sentence_rel, use_noise=1):
+    def apply(self, sentence, sentence_mask, sentence_morph, sentence_morph_mask, use_noise=1):
         """
             sentence : sentence * batch
-            sentence_morph : batch * sentence
+            sentence_morph : sentence * batch * morph
             sentence_rel : sentence * batch
         """
         n_emb_lstm = self.n_emb_lstm
@@ -35,7 +35,6 @@ class rnnlm_morph(object):
 
         src = sentence[:-1]
         src_mask = sentence_mask[:-1]
-        src_rel = sentence_rel[:-1]
         src_morph = sentence_morph
         src_morph_mask = sentence_morph_mask
         tgt = sentence[1:]
@@ -65,11 +64,12 @@ class rnnlm_morph(object):
         #rnn2 = LSTM(self.n_hids, self.n_hids)
         #hiddens , cells = rnn2.apply(hiddens , src_mask)
         #self.layers.append(rnn2)
-        morphStruct = MorphStruct(n_emb_morph , self.n_hids)
-        morph_out = morphStruct.apply(state_below_morph , src_morph_mask , src_rel)
-        self.layers.append(morphStruct)
 
-        rnn = MorphRNN(n_emb_lstm , self.n_hids)
+        morphStruct = MorphStruct()
+        morph_out = morphStruct.apply(state_below_morph , src_morph_mask)
+        #self.layers.append(morphStruct)
+
+        rnn = MorphRNN(n_emb_lstm , n_emb_morph , self.n_hids)
         hiddens  = rnn.apply(state_below, src_mask , morph_out)
         self.layers.append(rnn)
         #rnn = NormalRNN(n_emb_lstm , self.n_hids)
@@ -96,13 +96,14 @@ class rnnlm_morph(object):
         self.L2 = sum(T.sum(item ** 2) for item in self.params)
         self.L1 = sum(T.sum(abs(item)) for item in self.params)
 
-def test(test_fn , tst_stream , tst_morph_stream , rels):
+def test(test_fn , tst_stream , tst_morph , tst_morph_mask):
     sums = 0
     case = 0
-    for data_tuple , data_morph_tuple , rel in zip(tst_stream.get_epoch_iterator() , tst_morph_stream.get_epoch_iterator() , rels):
+    for data_tuple , data_morph , mask_morph in zip(tst_stream.get_epoch_iterator() , tst_morph , tst_morph_mask):
         data , mask = data_tuple
-        data_morph , mask_morph = data_morph_tuple
-        cost = test_fn(data.T, mask.T, data_morph, mask_morph, rel, 0)
+        data_morph = data_morph.reshape([data_morph.shape[1] , data_morph.shape[0] , data_morph.shape[2]])
+        mask_morph = mask_morph.reshape([mask_morph.shape[1] , mask_morph.shape[0] , mask_morph.shape[2]])
+        cost = test_fn(data.T, mask.T, data_morph, mask_morph, 0)
         sums += cost[0]
         case += sentence_mask[:,1:].sum()
     ppl = numpy.exp(sums/case)
@@ -142,13 +143,12 @@ if __name__=='__main__':
 
     sentence = T.lmatrix()
     sentence_mask = T.matrix()
-    sentence_morph = T.lmatrix()
-    sentence_morph_mask = T.matrix()
-    sentence_rel = T.matrix()
+    sentence_morph = T.ltensor3()
+    sentence_morph_mask = T.tensor3()
 
     use_noise = T.iscalar()
     lm = rnnlm_morph(**cfig)
-    lm.apply(sentence, sentence_mask, sentence_morph, sentence_morph_mask, sentence_rel, use_noise)
+    lm.apply(sentence, sentence_mask, sentence_morph, sentence_morph_mask, use_noise)
 
     cost_sum = lm.cost
     cost_mean = lm.cost/sentence.shape[1]
@@ -162,11 +162,11 @@ if __name__=='__main__':
     grads, nan_num, inf_num = step_clipping(params, grads, soft_clipping, cfig['shrink_scale_after_skip_nan_grad'], cfig['skip_nan_grad'])
 
     updates = adadelta(params, grads, hard_clipping)
-    vs , vs_morph , vs_rels = DStream(datatype='valid', config=cfig)
-    ts , ts_morph , ts_rels = DStream(datatype='test', config=cfig)
+    vs , vs_morph , vs_morph_mask = DStream(datatype='valid', config=cfig)
+    ts , ts_morph , ts_morph_mask = DStream(datatype='test', config=cfig)
 
-    fn = theano.function([sentence, sentence_mask, sentence_morph, sentence_morph_mask, sentence_rel, use_noise, soft_clipping], [cost_mean, nan_num, inf_num], updates=updates , on_unused_input='ignore')
-    test_fn = theano.function([sentence, sentence_mask, sentence_morph, sentence_morph_mask, sentence_rel, use_noise], [cost_sum] , on_unused_input='ignore')
+    fn = theano.function([sentence, sentence_mask, sentence_morph, sentence_morph_mask, use_noise, soft_clipping], [cost_mean, nan_num, inf_num], updates=updates , on_unused_input='ignore')
+    test_fn = theano.function([sentence, sentence_mask, sentence_morph, sentence_morph_mask, use_noise], [cost_sum] , on_unused_input='ignore')
 
     start_time = datetime.now()
     cur_time = start_time
@@ -182,10 +182,9 @@ if __name__=='__main__':
     check_freq = 5000
     for epoch in range(500):
         #logger.info('{} epoch has been tackled with {} bad;'.format(epoch, bad_counter))
-        ds , ds_morph , ds_rels = DStream(datatype='train', config=cfig)
-        for data_tuple , data_morph_tuple , rel in zip(ds.get_epoch_iterator() , ds_morph.get_epoch_iterator() , ds_rels):
+        ds , ds_morph , ds_morph_mask = DStream(datatype='train', config=cfig)
+        for data_tuple , data_morph , mask_morph in zip(ds.get_epoch_iterator() , ds_morph , ds_morph_mask):
             data , mask = data_tuple
-            data_morph , mask_morph = data_morph_tuple
             #print data , data.shape
             if cfig['drop_last_batch_if_small'] and (0.0 + len(data)) / cfig['batch_size'] < 0.95:
                 #logger.info('drop batch with: {}/{} ratio'.format(len(data), cfig['batch_size']))
@@ -193,7 +192,9 @@ if __name__=='__main__':
             else:
                 cur_clip = soft_clipping_curve(epoch, cfig['soft_clipping_epoch'], cfig['soft_clipping_begin'], cfig['soft_clipping_end'])
                 cur_batch_time = datetime.now()
-                c, grad_nan_num, grad_inf_num = fn(data.T, mask.T, data_morph , mask_morph, rel , 1, cur_clip)
+                data_morph = data_morph.reshape([data_morph.shape[1] , data_morph.shape[0] , data_morph.shape[2]])
+                mask_morph = mask_morph.reshape([mask_morph.shape[1] , mask_morph.shape[0] , mask_morph.shape[2]])
+                c, grad_nan_num, grad_inf_num = fn(data.T, mask.T, data_morph , mask_morph , 1, cur_clip)
                 batch_elasped_seconds = (datetime.now() - cur_batch_time).total_seconds()
                 logger.info('grad nan/inf num: {} {} at epoch {} cost {}'.format(grad_nan_num, grad_inf_num, epoch, batch_elasped_seconds))
                 #checked_sum_all记录总共训练的句子数

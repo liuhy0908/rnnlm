@@ -107,17 +107,19 @@ class MorphRNN(object):
         morph rnn
         h_t = h_tm1 * W_hh + x_t * W_xh + m_tm1 * W_mh + b
     """
-    def __init__(self , n_in , n_hids , **kwargs):
+    def __init__(self , n_in , n_morph_in, n_hids , **kwargs):
         self.n_in = n_in
+        self.n_morph_in = n_morph_in
         self.n_hids = n_hids
         self._init_params()
 
     def _init_params(self):
         size_xh = (self.n_in , self.n_hids)
+        size_mh = (self.n_morph_in , self.n_hids)
         size_hh = (self.n_hids , self.n_hids)
         self.W_xh = param_init().uniform(size_xh)
         self.W_hh = param_init().uniform(size_hh)
-        self.W_mh = param_init().uniform(size_hh)
+        self.W_mh = param_init().uniform(size_mh)
         self.b = param_init().constant((self.n_hids,))
         self.params = [self.W_xh , self.W_hh ,
                        self.W_mh , self.b]
@@ -150,36 +152,13 @@ class MorphStruct(object):
     def __init__(self):
         pass
 
-    def _merge(self , add , idx , morph):
-        return idx+add , morph[idx:idx+add,:].sum(0)
-
-    def _step(self , morph , rel):
+    def apply(self, state_below_morph , mask_morph ,init_state=None, context=None):
         """
-            rel : sentence
-            morph : sentence * n_emb_morph
+            state_below_morph : batch * sentence * morph * n_emb_morph
         """
-        idx = T.alloc(numpy.int32(0) , 1)
-        rval , updates = theano.scan(self._merge,
-                                    sequences=[rel],
-                                    outputs_info=[idx , None],
-                                    non_sequences=[morph]
-                                    )
-        return rval[0] , rval[1]
-
-    def apply(self, state_below_morph , mask_morph , rel ,init_state=None, context=None):
-        """
-            rel : batch * sentence
-            state_below_morph : batch * sentence * n_emb_morph
-        """
-        sentence_len = rel.shape[1]
-        n_steps = rel.shape[0]
-        rval , updates = theano.scan(self._step,
-                                     sequences=[state_below_morph , rel],
-                                     outputs_info=[None],
-                                     n_steps=n_steps)
-        self.output = rval
-        self.output.reshape(self.output[1] , self.output[0] , self.output[2])
-        return self.output
+        #h_t = x_m[:, None] * h_t + (1. - x_m[:, None]) * h_tm1
+        output = state_below_morph.sum(2)
+        return output
 
 class GRU(object):
 
