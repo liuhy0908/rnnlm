@@ -21,18 +21,18 @@ class PrepareData:
         self.seq_len = seq_len
         if kwargs['train_morph_file'] != "":
             self.train_char_file = kwargs['train_morph_file']
-            dic = self._creat_dic(self.train_char_file , kwargs['seq_morph_len'])
+            dic = self._creat_dic(self.train_char_file , kwargs['seq_morph_len'] , kwargs['morph_size'])
             f = open(kwargs['train_morph_dic'], 'wb')
             pickle.dump(dic, f)
             f.close()
 
-        dic = self._creat_dic(self.filename , self.seq_len)
+        dic = self._creat_dic(self.filename , self.seq_len , self.vocabsize)
         f = open(train_dic, 'wb')
         pickle.dump(dic, f)
         f.close()
         logger.info('dump train dict {} has been dumped'.format(train_dic))
 
-    def _creat_dic(self , filename , seq_len):
+    def _creat_dic(self , filename , seq_len , vocabsize):
         if os.path.isfile(filename):
             train = open(filename)
         else:
@@ -53,7 +53,7 @@ class PrepareData:
             del counter[self.unk_token]
         print len(counter)
         # most_common : return top n
-        for word, c in counter.most_common(self.vocabsize-3): #FIXME 2 or 3
+        for word, c in counter.most_common(vocabsize-3): #FIXME 2 or 3
             worddict[word] = index
             index += 1
 

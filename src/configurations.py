@@ -57,8 +57,8 @@ def get_config_morph():
     config['n_emb_lstm'] = 200
     config['batch_size'] = 100
     config['batch_size_valid'] = 100
-    config['vocab_size'] = 100001
-    config['morph_size'] = 40001
+    config['vocab_size'] = 10001
+    config['morph_size'] = 10001
 
     ####### devil in detail ##############
     config['use_noise'] = 1                     # use noise = 1 mean use dropout layer ?

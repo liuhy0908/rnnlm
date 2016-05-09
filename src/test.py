@@ -11,10 +11,11 @@ def test():
     dic2 = {}
     for key in dic:
         dic2[dic[key]] = key
-    print dic2[0]
+    #print dic2[0]
     i = 0
+    print len(dic)
     for key in dic:
-        print key , dic[key]
+        #print key , dic[key]
         i += 1
         if i >= 100:
             break
@@ -123,7 +124,7 @@ def test7():
 
 
 if __name__ == "__main__":
-    test7()
+    test()
 
 
 
