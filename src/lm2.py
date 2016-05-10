@@ -194,7 +194,7 @@ if __name__=='__main__':
                 cur_batch_time = datetime.now()
                 data_morph = data_morph.reshape([data_morph.shape[1] , data_morph.shape[0] , data_morph.shape[2]])
                 mask_morph = mask_morph.reshape([mask_morph.shape[1] , mask_morph.shape[0] , mask_morph.shape[2]])
-                print data.T.shape , data_morph.shape
+                #print data.T.shape , data_morph.shape
                 c, grad_nan_num, grad_inf_num = fn(data.T, mask.T, data_morph , mask_morph , 1, cur_clip)
                 batch_elasped_seconds = (datetime.now() - cur_batch_time).total_seconds()
                 logger.info('grad nan/inf num: {} {} at epoch {} cost {}'.format(grad_nan_num, grad_inf_num, epoch, batch_elasped_seconds))
@@ -210,8 +210,8 @@ if __name__=='__main__':
                     checked_sum += cfig['batch_size']
                     # FIXME : if train size < check_freq, there will be no check point
                 else:
-                    valid_err = test(test_fn, vs)
-                    test_err = test(test_fn, ts)
+                    valid_err = test(test_fn, vs , vs_morph , vs_morph_mask)
+                    test_err = test(test_fn, ts , ts_morph , ts_morph_mask)
                     checked_sum = 0
                     valid_errs.append(valid_err)
                     test_errs.append(test_err)
