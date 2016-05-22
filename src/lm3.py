@@ -198,8 +198,8 @@ if __name__=='__main__':
                     checked_sum += cfig['batch_size']
                     # FIXME : if train size < check_freq, there will be no check point
                 else:
-                    valid_err = test(test_fn, vs)
-                    test_err = test(test_fn, ts)
+                    valid_err = test(test_fn, vs , vs_morph , vs_morph_mask)
+                    test_err = test(test_fn, ts , ts_morph , ts_morph_mask)
                     checked_sum = 0
                     valid_errs.append(valid_err)
                     test_errs.append(test_err)
