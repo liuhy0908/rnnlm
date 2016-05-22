@@ -102,8 +102,6 @@ def test(test_fn , tst_stream , tst_morph , tst_morph_mask):
         data , mask = data_tuple
         data_morph = data_morph.transpose((1 , 0 , 2))
         mask_morph = mask_morph.transpose((1 , 0 , 2))
-        #data_morph = data_morph.reshape([data_morph.shape[1] , data_morph.shape[0] , data_morph.shape[2]])
-        #mask_morph = mask_morph.reshape([mask_morph.shape[1] , mask_morph.shape[0] , mask_morph.shape[2]])
         cost = test_fn(data.T, mask.T, data_morph, mask_morph, 0)
         sums += cost[0]
         case += mask[:,1:].sum()
@@ -195,8 +193,6 @@ if __name__=='__main__':
                 cur_batch_time = datetime.now()
                 data_morph = data_morph.transpose((1 , 0 , 2))
                 mask_morph = mask_morph.transpose((1 , 0 , 2))
-                #data_morph = data_morph.reshape([data_morph.shape[1] , data_morph.shape[0] , data_morph.shape[2]])
-                #mask_morph = mask_morph.reshape([mask_morph.shape[1] , mask_morph.shape[0] , mask_morph.shape[2]])
                 #print data.T.shape , data_morph.shape
                 c, grad_nan_num, grad_inf_num = fn(data.T, mask.T, data_morph , mask_morph , 1, cur_clip)
                 batch_elasped_seconds = (datetime.now() - cur_batch_time).total_seconds()

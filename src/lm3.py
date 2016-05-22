@@ -93,7 +93,7 @@ def test(test_fn , tst_stream , tst_morph , tst_morph_mask):
         mask_morph = mask_morph.transpose((1 , 0 , 2))
         cost = test_fn(data.T, mask.T, data_morph, mask_morph, 0)
         sums += cost[0]
-        case += sentence_mask[:,1:].sum()
+        case += mask[:,1:].sum()
     ppl = numpy.exp(sums/case)
     return ppl
 
@@ -126,7 +126,7 @@ def soft_clipping_curve(cur_epoch, last_curve_epoch, clip_begin, clip_end):
     return cur_clip
 if __name__=='__main__':
     import configurations
-    cfig = getattr(configurations, 'get_config_morph')()
+    cfig = getattr(configurations, 'get_config_morph2')()
     logger.info("\nModel options:\n{}".format(pprint.pformat(cfig)))
 
     sentence = T.lmatrix()
