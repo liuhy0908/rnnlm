@@ -28,7 +28,6 @@ class rnnlm_morph(object):
         """
             sentence : sentence * batch
             sentence_morph : sentence * batch * morph
-            sentence_rel : sentence * batch
         """
         n_emb_lstm = self.n_emb_lstm
         n_emb_morph = self.n_emb_morph
@@ -101,11 +100,13 @@ def test(test_fn , tst_stream , tst_morph , tst_morph_mask):
     case = 0
     for data_tuple , data_morph , mask_morph in zip(tst_stream.get_epoch_iterator() , tst_morph , tst_morph_mask):
         data , mask = data_tuple
-        data_morph = data_morph.reshape([data_morph.shape[1] , data_morph.shape[0] , data_morph.shape[2]])
-        mask_morph = mask_morph.reshape([mask_morph.shape[1] , mask_morph.shape[0] , mask_morph.shape[2]])
+        data_morph = data_morph.transpose((1 , 0 , 2))
+        mask_morph = mask_morph.transpose((1 , 0 , 2))
+        #data_morph = data_morph.reshape([data_morph.shape[1] , data_morph.shape[0] , data_morph.shape[2]])
+        #mask_morph = mask_morph.reshape([mask_morph.shape[1] , mask_morph.shape[0] , mask_morph.shape[2]])
         cost = test_fn(data.T, mask.T, data_morph, mask_morph, 0)
         sums += cost[0]
-        case += sentence_mask[:,1:].sum()
+        case += mask[:,1:].sum()
     ppl = numpy.exp(sums/case)
     return ppl
 
@@ -192,8 +193,10 @@ if __name__=='__main__':
             else:
                 cur_clip = soft_clipping_curve(epoch, cfig['soft_clipping_epoch'], cfig['soft_clipping_begin'], cfig['soft_clipping_end'])
                 cur_batch_time = datetime.now()
-                data_morph = data_morph.reshape([data_morph.shape[1] , data_morph.shape[0] , data_morph.shape[2]])
-                mask_morph = mask_morph.reshape([mask_morph.shape[1] , mask_morph.shape[0] , mask_morph.shape[2]])
+                data_morph = data_morph.transpose((1 , 0 , 2))
+                mask_morph = mask_morph.transpose((1 , 0 , 2))
+                #data_morph = data_morph.reshape([data_morph.shape[1] , data_morph.shape[0] , data_morph.shape[2]])
+                #mask_morph = mask_morph.reshape([mask_morph.shape[1] , mask_morph.shape[0] , mask_morph.shape[2]])
                 #print data.T.shape , data_morph.shape
                 c, grad_nan_num, grad_inf_num = fn(data.T, mask.T, data_morph , mask_morph , 1, cur_clip)
                 batch_elasped_seconds = (datetime.now() - cur_batch_time).total_seconds()

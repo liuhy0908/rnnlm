@@ -1,9 +1,9 @@
 #encoding=utf8
 import theano
 import theano.tensor as T
-from model import NormalRNN , MorphRNN , MorphStruct , GRU, LSTM, FLSTM, lookup_table,dropout_layer, maxout_layer, rnn_pyramid_layer, LogisticRegression
+from model import NormalRNN , MorphRNN , MorphStruct , MorphStructRNN , GRU, LSTM, FLSTM, lookup_table,dropout_layer, maxout_layer, rnn_pyramid_layer, LogisticRegression
 from utils import adadelta, step_clipping
-from stream_morph import DStream
+from stream_morph2 import DStream
 import numpy
 from datetime import datetime,timedelta
 import time
@@ -28,49 +28,37 @@ class rnnlm_morph(object):
         """
             sentence : sentence * batch
             sentence_morph : sentence * batch * morph
-            sentence_rel : sentence * batch
         """
         n_emb_lstm = self.n_emb_lstm
         n_emb_morph = self.n_emb_morph
 
         src = sentence[:-1]
         src_mask = sentence_mask[:-1]
-        src_morph = sentence_morph
-        src_morph_mask = sentence_morph_mask
+
+        src_morph = sentence_morph[:-1]
+        src_morph_mask = sentence_morph_mask[:-1]
+
         tgt = sentence[1:]
         tgt_mask = sentence_mask[1:]
 
-        emb_lstm_range = T.arange(n_emb_lstm)
-        #word lookup table
-        table = lookup_table(n_emb_lstm, self.vocab_size, name='Wemb')
-        state_below = table.apply(src, emb_lstm_range)
-        self.layers.append(table)
-
-        emb_morph_range = T.arange(n_emb_morph)
         #morph lookup table
+        emb_morph_range = T.arange(n_emb_morph)
         table_morph = lookup_table(n_emb_morph, self.morph_size, name='Memb')
         state_below_morph = table_morph.apply(src_morph, emb_morph_range)
         self.layers.append(table_morph)
 
         if self.dropout < 1.0:
-            state_below = dropout_layer(state_below, use_noise, self.dropout)
             state_below_morph = dropout_layer(state_below_morph, use_noise, self.dropout)
 
-        #rnn = LSTM(n_emb_lstm, self.n_hids)
-        #hiddens , cells  = rnn.apply(state_below, src_mask)
-        #self.layers.append(rnn)
+        morph = MorphStructRNN(n_emb_morph , self.n_hids)
+        hiddens = morph.apply(state_below_morph , src_morph_mask)
+        self.layers.append(morph)
+
         #if self.dropout < 1.0:
         #    hiddens = dropout_layer(hiddens, use_noise, self.dropout)
-        #rnn2 = LSTM(self.n_hids, self.n_hids)
-        #hiddens , cells = rnn2.apply(hiddens , src_mask)
-        #self.layers.append(rnn2)
 
-        morphStruct = MorphStruct()
-        morph_out = morphStruct.apply(state_below_morph , src_morph_mask)
-        #self.layers.append(morphStruct)
-
-        rnn = MorphRNN(n_emb_lstm , n_emb_morph , self.n_hids)
-        hiddens  = rnn.apply(state_below, src_mask , morph_out)
+        rnn = LSTM(self.n_hids , self.n_hids)
+        hiddens , cells  = rnn.apply(hiddens , src_mask)
         self.layers.append(rnn)
         #rnn = NormalRNN(n_emb_lstm , self.n_hids)
         #hiddens  = rnn.apply(state_below, src_mask)
@@ -101,8 +89,8 @@ def test(test_fn , tst_stream , tst_morph , tst_morph_mask):
     case = 0
     for data_tuple , data_morph , mask_morph in zip(tst_stream.get_epoch_iterator() , tst_morph , tst_morph_mask):
         data , mask = data_tuple
-        data_morph = data_morph.reshape([data_morph.shape[1] , data_morph.shape[0] , data_morph.shape[2]])
-        mask_morph = mask_morph.reshape([mask_morph.shape[1] , mask_morph.shape[0] , mask_morph.shape[2]])
+        data_morph = data_morph.transpose((1 , 0 , 2))
+        mask_morph = mask_morph.transpose((1 , 0 , 2))
         cost = test_fn(data.T, mask.T, data_morph, mask_morph, 0)
         sums += cost[0]
         case += sentence_mask[:,1:].sum()
@@ -165,7 +153,8 @@ if __name__=='__main__':
     vs , vs_morph , vs_morph_mask = DStream(datatype='valid', config=cfig)
     ts , ts_morph , ts_morph_mask = DStream(datatype='test', config=cfig)
 
-    fn = theano.function([sentence, sentence_mask, sentence_morph, sentence_morph_mask, use_noise, soft_clipping], [cost_mean, nan_num, inf_num], updates=updates , on_unused_input='ignore')
+    fn = theano.function([sentence, sentence_mask, sentence_morph, sentence_morph_mask, use_noise, soft_clipping],
+                         [cost_mean, nan_num, inf_num], updates=updates , on_unused_input='ignore')
     test_fn = theano.function([sentence, sentence_mask, sentence_morph, sentence_morph_mask, use_noise], [cost_sum] , on_unused_input='ignore')
 
     start_time = datetime.now()
@@ -192,9 +181,8 @@ if __name__=='__main__':
             else:
                 cur_clip = soft_clipping_curve(epoch, cfig['soft_clipping_epoch'], cfig['soft_clipping_begin'], cfig['soft_clipping_end'])
                 cur_batch_time = datetime.now()
-                data_morph = data_morph.reshape([data_morph.shape[1] , data_morph.shape[0] , data_morph.shape[2]])
-                mask_morph = mask_morph.reshape([mask_morph.shape[1] , mask_morph.shape[0] , mask_morph.shape[2]])
-                print data.T.shape , data_morph.shape
+                data_morph = data_morph.transpose((1 , 0 , 2))
+                mask_morph = mask_morph.transpose((1 , 0 , 2))
                 c, grad_nan_num, grad_inf_num = fn(data.T, mask.T, data_morph , mask_morph , 1, cur_clip)
                 batch_elasped_seconds = (datetime.now() - cur_batch_time).total_seconds()
                 logger.info('grad nan/inf num: {} {} at epoch {} cost {}'.format(grad_nan_num, grad_inf_num, epoch, batch_elasped_seconds))

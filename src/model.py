@@ -154,11 +154,51 @@ class MorphStruct(object):
 
     def apply(self, state_below_morph , mask_morph ,init_state=None, context=None):
         """
-            state_below_morph : batch * sentence * morph * n_emb_morph
+            state_below_morph : sentence * batch * morph * n_emb_morph
         """
         #h_t = x_m[:, None] * h_t + (1. - x_m[:, None]) * h_tm1
         output = state_below_morph.sum(2)
         return output
+
+
+class MorphStructRNN(object):
+    """
+        morph struct with rnn
+    """
+    def __init__(self , n_emb_morph , n_hids):
+        self.n_hids = n_hids
+        self.lstm = LSTM(n_emb_morph, self.n_hids)
+        self.params = []
+        self.params.extend(self.lstm.params)
+    def apply(self , state_below , mask_morph):
+        """
+            state_below : sentence * batch * morph * n_emb_morph
+            return : sentence * batch * n_emb
+        """
+        newshape = [state_below.shape[2] , state_below.shape[0] * state_below.shape[1] , state_below.shape[3]]
+        outshape = [state_below.shape[0] , state_below.shape[1] , self.n_hids]
+        state_below = state_below.transpose((2 , 0 , 1 , 3)).reshape(newshape)
+        maskshape = [mask_morph.shape[2] , mask_morph.shape[0] * mask_morph.shape[1]]
+        mask_morph = mask_morph.transpose(2 , 0 , 1).reshape(maskshape)
+        '''
+            lstm input : sentence * batch * emb
+            lstm output : sentence * batch * n_hids
+            real input : morph * (sentence * batch) * emb_morph
+            mask_morph : morph * (sentence * batch)
+        '''
+        hiddens , cells  = self.lstm.apply(state_below, mask_morph)
+        '''
+        if state_below.ndim == 1:
+            pass
+        else:
+            print hiddens.flatten().shape
+            print hiddens[:,:,-1].transpose(1 , 0).reshape(outshape).flatten().shape
+            raise NotImplementedError
+        '''
+        hiddens = hiddens[-1,:,:].reshape(outshape)
+        # hiddens : sentence * batch * n_hids
+        return hiddens
+
 
 class GRU(object):
 
