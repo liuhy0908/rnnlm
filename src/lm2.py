@@ -34,8 +34,8 @@ class rnnlm_morph(object):
 
         src = sentence[:-1]
         src_mask = sentence_mask[:-1]
-        src_morph = sentence_morph
-        src_morph_mask = sentence_morph_mask
+        src_morph = sentence_morph[:-1]
+        src_morph_mask = sentence_morph_mask[:-1]
         tgt = sentence[1:]
         tgt_mask = sentence_mask[1:]
 
