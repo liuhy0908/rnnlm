@@ -134,13 +134,13 @@ def get_config_morph2():
     config['check_low_freq_count'] = 1500000
 
     ####### path ##############
-    datadir = '../data/uy_data2/'
+    datadir = '../data/cs/'
     config['train_file'] = datadir + 'train_word'
     config['train_morph_file'] = datadir + 'train_morph'
     config['train_rel_file'] = datadir + 'train_rel'
-    config['valid_file'] = datadir + 'valid_word'
-    config['valid_morph_file'] = datadir + 'valid_morph'
-    config['valid_rel_file'] = datadir + 'valid_rel'
+    config['valid_file'] = datadir + 'dev_word'
+    config['valid_morph_file'] = datadir + 'dev_morph'
+    config['valid_rel_file'] = datadir + 'dev_rel'
     config['test_file'] = datadir + 'test_word'
     config['test_morph_file'] = datadir + 'test_morph'
     config['test_rel_file'] = datadir + 'test_rel'
